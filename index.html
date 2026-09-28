@@ -258,6 +258,35 @@
     .chart-wrap {
       position: relative; height: 260px;
     }
+    .month-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .month-card {
+      width: 100%;
+      background: rgba(148,163,184,0.03);
+      border: 1px solid var(--bd);
+      border-radius: 14px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+    .month-card:hover, .month-card.active {
+      border-color: var(--ac); background: rgba(79,70,229,0.06);
+      transform: translateY(-2px);
+    }
+    .month-head {
+      display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .month-body {
+      display: flex; flex-direction: column; gap: 4px; color: var(--mut); font-size: 12px;
+    }
+    .month-body strong {
+      color: var(--tx); font-size: 18px; margin-top: 6px;
+    }
     @media (max-width: 768px) {
       .g2, .g3, .g4 { grid-template-columns: 1fr; }
       .header { align-items: flex-start; }
@@ -340,7 +369,8 @@
       dateTo: '',
       amtMin: 0,
       amtMax: 999999,
-      theme: 'auto'
+      theme: 'auto',
+      selectedMonth: ''
     };
 
     const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
@@ -356,7 +386,8 @@
           to: S.dateTo,
           amn: S.amtMin,
           amx: S.amtMax,
-          th: S.theme
+          th: S.theme,
+          sm: S.selectedMonth
         }));
       } catch (e) {}
     }
@@ -373,6 +404,7 @@
           S.amtMin = d.amn ?? 0;
           S.amtMax = d.amx ?? 999999;
           S.theme = d.th || 'auto';
+          S.selectedMonth = d.sm || '';
         }
       } catch (e) {}
     }
@@ -531,6 +563,26 @@
       render();
     }
 
+    function buildMonthSummaries(source = S.txns) {
+      const map = {};
+      source.forEach(t => {
+        const signed = flow({ ...t, raw: t.raw });
+        const month = t.date.slice(0, 7);
+        if (!map[month]) {
+          map[month] = { month, income: 0, spend: 0, net: 0, count: 0 };
+        }
+        map[month].count += 1;
+        if (signed > 0) {
+          map[month].income += signed;
+        } else {
+          map[month].spend += Math.abs(signed);
+        }
+        map[month].net += signed;
+      });
+
+      return Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
+    }
+
     function view() {
       const q = S.q.toLowerCase();
       return S.txns.map(t => ({ ...t, c: catOf(t), f: flow(t) })).filter(t => {
@@ -585,7 +637,7 @@
             <td class="r">${o.n}</td>
             <td class="r ${o.s < 0 ? 'neg' : 'pos'}">${fmt(o.s)}</td>
           </tr>`).join('')}</tbody></table>`;
-      } else {
+      } else if (S.view === 'cat') {
         const g = {};
         spendRows.forEach(t => {
           const o = g[t.c] || (g[t.c] = { c: t.c, n: 0, s: 0 });
@@ -707,6 +759,91 @@
       }
 
       return { spendRows, incomeRows, catEntries, months };
+    }
+
+    function renderMonthOverview() {
+      const months = buildMonthSummaries();
+      if (!months.length) {
+        $('#table-container').innerHTML = '<div class="empty">No monthly data yet. Upload statements to see months.</div>';
+        return;
+      }
+
+      if (!S.selectedMonth || !months.some(m => m.month === S.selectedMonth)) {
+        S.selectedMonth = months[months.length - 1].month;
+      }
+
+      const selected = months.find(m => m.month === S.selectedMonth) || months[months.length - 1];
+      const selectedRows = S.txns.filter(t => t.date.startsWith(selected.month));
+      const selectedSpend = selectedRows.filter(t => flow({ ...t, raw: t.raw }) < 0);
+      const selectedIncome = selectedRows.filter(t => flow({ ...t, raw: t.raw }) > 0);
+      const totalSelectedSpend = selectedSpend.reduce((sum, t) => sum - flow({ ...t, raw: t.raw }), 0);
+      const totalSelectedIncome = selectedIncome.reduce((sum, t) => sum + flow({ ...t, raw: t.raw }), 0);
+      const categoryTotals = {};
+      selectedSpend.forEach(t => {
+        const category = catOf({ m: t.m, desc: t.desc });
+        categoryTotals[category] = (categoryTotals[category] || 0) + Math.abs(flow({ ...t, raw: t.raw }));
+      });
+      const categoryEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+
+      const cards = months.map(item => {
+        const active = item.month === selected.month ? 'active' : '';
+        return `
+          <div class="month-card ${active}" data-month="${item.month}">
+            <div class="month-head"><span>${new Date(item.month + '-01').toLocaleString('en-US', { month: 'short', year: 'numeric' })}</span><span>${item.count} txns</span></div>
+            <div class="month-body">
+              <span>Income: <b class="pos">${fmt(item.income)}</b></span>
+              <span>Spend: <b class="neg">${fmt(item.spend)}</b></span>
+              <strong>${fmt(item.net)}</strong>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const detailRows = categoryEntries.map(([cat, value]) => `
+        <tr>
+          <td><span class="dot" style="background:${COL[cat]}; color:${COL[cat]};"></span>${EMOJI[cat]} ${cat}</td>
+          <td class="r">${fmt(value)}</td>
+          <td class="r">${((value / Math.max(totalSelectedSpend, 1)) * 100).toFixed(1)}%</td>
+        </tr>
+      `).join('');
+
+      $('#table-container').innerHTML = `
+        <div class="card" style="margin-top: 8px; border:none; box-shadow:none; padding:0;">
+          <div class="month-grid">${cards}</div>
+          <div class="grid g3" style="margin-top:16px;">
+            <div class="insight">
+              <div class="label">Month</div>
+              <div class="value">${new Date(selected.month + '-01').toLocaleString('en-US', { month: 'long', year: 'numeric' })}</div>
+              <div class="detail">${selected.count} transactions</div>
+            </div>
+            <div class="insight">
+              <div class="label">Income</div>
+              <div class="value pos">${fmt(totalSelectedIncome)}</div>
+              <div class="detail">Incoming for this month</div>
+            </div>
+            <div class="insight">
+              <div class="label">Spend</div>
+              <div class="value neg">${fmt(totalSelectedSpend)}</div>
+              <div class="detail">Net ${fmt(totalSelectedIncome - totalSelectedSpend)}</div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:18px;">
+            <div class="k" style="color: var(--mut); margin-bottom: 8px;">${new Date(selected.month + '-01').toLocaleString('en-US', { month: 'long', year: 'numeric' })} by category</div>
+            <table>
+              <thead><tr><th>Category</th><th class="r">Amount</th><th class="r">Share</th></tr></thead>
+              <tbody>${detailRows || '<tr><td colspan="3" class="empty">No category details for this month.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      $$('.month-card[data-month]').forEach(card => {
+        card.onclick = () => {
+          S.selectedMonth = card.dataset.month;
+          save();
+          render();
+        };
+      });
     }
 
     function render() {
@@ -831,11 +968,12 @@
           <button class="tab ${S.view === 'tx' ? 'active' : ''}" data-tab="tx">📋 Transactions</button>
           <button class="tab ${S.view === 'mer' ? 'active' : ''}" data-tab="mer">🏪 Merchants</button>
           <button class="tab ${S.view === 'cat' ? 'active' : ''}" data-tab="cat">📂 Categories</button>
+          <button class="tab ${S.view === 'month' ? 'active' : ''}" data-tab="month">🗓️ Months</button>
         </div>
 
         <div class="tools">
           <input id="q" placeholder="🔍 Search description, merchant, or category…" value="${esc(S.q)}">
-          <button id="toggleView">${S.view === 'tx' ? 'Group by merchant' : 'Show transactions'}</button>
+          <button id="toggleView">${S.view === 'tx' ? 'Group by merchant' : S.view === 'month' ? 'Show transactions' : 'Show transactions'}</button>
           ${S.cat ? `<button id="xc">Clear category filter</button>` : ''}
         </div>
 
@@ -843,15 +981,26 @@
         <div class="msg" style="margin-top:16px;">💡 Tip: update category values to reclassify merchants and improve future spending insight.</div>
       `;
 
-      renderCharts(filtered);
-      renderTable(filtered, spendRows, catEntries);
+      if (S.view === 'month') {
+        renderMonthOverview();
+      } else {
+        renderCharts(filtered);
+        renderTable(filtered, spendRows, catEntries);
+      }
 
       $('#dateFrom').onchange = e => { S.dateFrom = e.target.value; save(); render(); };
       $('#dateTo').onchange = e => { S.dateTo = e.target.value; save(); render(); };
       $('#amtMin').onchange = e => { S.amtMin = Number(e.target.value) || 0; save(); render(); };
       $('#amtMax').onchange = e => { S.amtMax = Number(e.target.value) || 999999; save(); render(); };
       $('#resetFilters').onclick = () => { S.dateFrom = ''; S.dateTo = ''; S.amtMin = 0; S.amtMax = 999999; save(); render(); };
-      $('#toggleView').onclick = () => { S.view = S.view === 'tx' ? 'mer' : 'tx'; render(); };
+      $('#toggleView').onclick = () => {
+        if (S.view === 'month') {
+          S.view = 'tx';
+        } else {
+          S.view = S.view === 'tx' ? 'mer' : 'tx';
+        }
+        render();
+      };
       $('#xc') && ($('#xc').onclick = () => { S.cat = ''; render(); });
       $('#q').oninput = e => {
         S.q = e.target.value;
@@ -905,6 +1054,7 @@
       if (confirm('Delete all stored financial data and custom categories?')) {
         S.txns = [];
         S.rules = {};
+        S.selectedMonth = '';
         save();
         render();
       }
