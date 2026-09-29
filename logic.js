@@ -71,7 +71,7 @@
     ['Gift', '#a21caf', /\bgifts?\b|\bpresents?\b|shagun|gift\s?card|gift\s?shop|\bhamper\b/i, '✦', 'Family & religious', 'spend'],
     ['Gifts', '#a21caf', /\bgifts?\b/i, '✦', 'Family & religious', 'spend'],
     ['Wedding & Functions', '#a21caf', /wedding|function hall|\bmarriage\b/i, '✦', 'Family & religious', 'spend'],
-    ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|hotstar|sonyliv|zee5|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|\bsubscription\b|patreon|icloud/i, '▶', 'Lifestyle', 'spend', 'Entertainment / OTT'],
+    ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|hotstar|sonyliv|zee5|apple\.|itunes|google one|google \*|youtube|openai|anthropic|claude|\bprime\b|adobe|microsoft|\bsubscription\b|patreon|icloud|gym membership|\bgym\b/i, '▶', 'Lifestyle', 'spend'],
     ['Entertainment', '#c026d3', /\bamc\b|cinema|movie|ticketmaster|steam|\bgames?\b|gamestop|concert|bowling|theater|\bshow\b/i, '★', 'Lifestyle', 'spend'],
     ['Shopping', '#e11d48', /amazon|\bamzn\b|flipkart|myntra|ajio|meesho|\btarget\b|best buy|ebay|etsy|home depot|\blowes?\b|\blowe's\b|ikea|\bnike\b|\bmacy\b|tj maxx|marshalls|\bshops?\b|\bstores?\b|retail/i, '🛍', 'Lifestyle', 'spend', 'Shopping (Amazon/Flipkart/Myntra)'],
     ['Travel', '#4f46e5', /airline|delta air|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|\bflights?\b|motel|\btrips?\b/i, '✈', 'Lifestyle', 'spend'],
