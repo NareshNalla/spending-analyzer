@@ -17,10 +17,6 @@
     view: 'tx',
     sk: 'date',
     sd: -1,
-    dateFrom: '',
-    dateTo: '',
-    amtMin: 0,
-    amtMax: null,
     theme: 'auto',
     selectedMonth: '',
     section: 'spend',
@@ -58,10 +54,10 @@
       t: S.txns,
       r: S.rules,
       m: S.mode,
-      f: S.dateFrom,
-      to: S.dateTo,
-      amn: S.amtMin,
-      amx: S.amtMax,
+      f: '',
+      to: '',
+      amn: 0,
+      amx: null,
       th: S.theme,
       sm: S.selectedMonth,
       sec: S.section,
@@ -87,10 +83,6 @@
     S.txns = migrated.txns;
     S.rules = migrated.rules;
     S.mode = d.m === 'bank' || d.m === 'card' ? d.m : 'auto';
-    S.dateFrom = d.f || '';
-    S.dateTo = d.to || '';
-    S.amtMin = Number.isFinite(Number(d.amn)) ? Number(d.amn) : 0;
-    S.amtMax = (d.amx == null || Number(d.amx) === 999999) ? null : Number(d.amx);
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
     S.section = ['spend', 'budgets', 'goals', 'projections', 'settings'].includes(d.sec) ? d.sec : 'spend';
@@ -106,12 +98,6 @@
   function syncControls() {
     $('#mode').value = S.mode;
     $('#theme').value = S.theme;
-    $('#dateFrom').value = S.dateFrom;
-    $('#dateTo').value = S.dateTo;
-    $('#amtMin').value = S.amtMin ? String(S.amtMin) : '';
-    $('#amtMax').value = S.amtMax == null ? '' : String(S.amtMax);
-    const cat = $('#catFilter');
-    if (cat && document.activeElement !== cat) cat.value = S.cat;
   }
 
   function load() {
@@ -122,8 +108,8 @@
     const merchantsChanged = (d.t || []).some((t, i) => !t.id || t.m !== S.txns[i].m);
     const rulesChanged = JSON.stringify(d.r || {}) !== JSON.stringify(S.rules);
     const storedMax = d.amx == null || d.amx === '' ? null : Number(d.amx);
-    const maxChanged = storedMax !== S.amtMax;
-    if (merchantsChanged || rulesChanged || maxChanged) save();
+    const filtersSet = !!(d.f || d.to || Number(d.amn) || (storedMax != null && storedMax !== 999999));
+    if (merchantsChanged || rulesChanged || filtersSet) save();
   }
 
   function applyTheme(pref) {
@@ -162,35 +148,6 @@
     return { from: S.selectedMonth + '-01', to: S.selectedMonth + '-31' };
   }
 
-  function alignDatesToPeriod() {
-    const bounds = periodBounds();
-    if (!bounds.from) return;
-    const from = S.dateFrom;
-    const to = S.dateTo;
-    const start = from || bounds.from;
-    const end = to || bounds.to;
-    if (start > bounds.to || end < bounds.from) {
-      S.dateFrom = '';
-      S.dateTo = '';
-    } else {
-      if (from && from < bounds.from) S.dateFrom = bounds.from;
-      if (to && to > bounds.to) S.dateTo = bounds.to;
-    }
-    const fromEl = $('#dateFrom');
-    const toEl = $('#dateTo');
-    if (fromEl) {
-      fromEl.min = bounds.from;
-      fromEl.max = bounds.to;
-      if (document.activeElement !== fromEl) fromEl.value = S.dateFrom;
-    }
-    if (toEl) {
-      toEl.min = bounds.from;
-      toEl.max = bounds.to;
-      if (document.activeElement !== toEl) toEl.value = S.dateTo;
-    }
-    if (from !== S.dateFrom || to !== S.dateTo) save();
-  }
-
   function currentView() {
     ensurePeriod();
     const decorated = L.decorate(S.txns, S.mode, S.rules);
@@ -198,20 +155,7 @@
     const inPeriod = bounds.from
       ? decorated.rows.filter(t => t.date >= bounds.from && t.date <= bounds.to)
       : decorated.rows;
-    let from = S.dateFrom;
-    let to = S.dateTo;
-    if (bounds.from) {
-      if (!from || from < bounds.from) from = bounds.from;
-      if (!to || to > bounds.to) to = bounds.to;
-    }
-    const filtered = L.filterRows(inPeriod, {
-      q: S.q,
-      cat: S.cat,
-      dateFrom: from,
-      dateTo: to,
-      amtMin: S.amtMin,
-      amtMax: S.amtMax
-    });
+    const filtered = L.filterRows(inPeriod, { q: S.q, cat: S.cat });
     return { mode: decorated.mode, all: inPeriod, filtered, rows: decorated.rows, summary: L.summarize(filtered) };
   }
 
@@ -631,8 +575,8 @@
   function renderPlan(rows) {
     const bounds = periodBounds();
     const report = L.planReport(rows, S.budgets, S.goals, {
-      dateFrom: bounds.from || S.dateFrom,
-      dateTo: bounds.to || S.dateTo
+      dateFrom: bounds.from,
+      dateTo: bounds.to
     });
     const sig = JSON.stringify(report);
     if (sig === planSig) return;
@@ -769,7 +713,6 @@
     dashboard.hidden = false;
     $('#monthSection').hidden = false;
     renderPeriodBar();
-    alignDatesToPeriod();
     const view = currentView();
     renderMonths(view.rows);
     const monthSummary = L.summarize(view.all);
@@ -786,19 +729,12 @@
     renderProjections(view.all);
     renderCategories(monthSummary.categories, monthSummary.totalSpend);
     $('#recurCard').hidden = true;
-    const warn = $('#filterWarn');
-    if (S.dateFrom && S.dateTo && S.dateFrom > S.dateTo) {
-      warn.hidden = false;
-      warn.textContent = 'The start date is after the end date, so nothing can match.';
-    } else warn.hidden = true;
     const noun = view.filtered.length === 1 ? 'transaction' : 'transactions';
     $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + L.formatMonth(S.selectedMonth, true) + '.';
     syncTabs();
     drawChart(monthSummary.months);
     renderPanel(view.filtered, summary);
     dropMerchantOptionNodes();
-    const cat = $('#catFilter');
-    if (document.activeElement !== cat) cat.value = S.cat;
   }
 
   function showToast(text, onUndo) {
@@ -831,36 +767,6 @@
   function toggleCategory(name) {
     S.cat = S.cat === name ? '' : name;
     S.view = 'tx';
-    $('#catFilter').value = S.cat;
-    refresh();
-  }
-
-  function readMin(value) {
-    if (value === '' || value == null) return 0;
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? n : 0;
-  }
-
-  function readMax(value) {
-    if (value === '' || value == null) return null;
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  }
-
-  function resetFilters() {
-    S.dateFrom = '';
-    S.dateTo = '';
-    S.amtMin = 0;
-    S.amtMax = null;
-    S.cat = '';
-    S.q = '';
-    $('#dateFrom').value = '';
-    $('#dateTo').value = '';
-    $('#amtMin').value = '';
-    $('#amtMax').value = '';
-    $('#catFilter').value = '';
-    $('#q').value = '';
-    save();
     refresh();
   }
 
@@ -1076,12 +982,6 @@
     });
     $('#loadSample').addEventListener('click', addSample);
     $('#loadSampleMore').addEventListener('click', addSample);
-    $('#dateFrom').addEventListener('change', e => { S.dateFrom = e.target.value; save(); refresh(); });
-    $('#dateTo').addEventListener('change', e => { S.dateTo = e.target.value; save(); refresh(); });
-    $('#amtMin').addEventListener('change', e => { S.amtMin = readMin(e.target.value); save(); refresh(); });
-    $('#amtMax').addEventListener('change', e => { S.amtMax = readMax(e.target.value); save(); refresh(); });
-    $('#catFilter').addEventListener('change', e => { S.cat = e.target.value; refresh(); });
-    $('#resetFilters').addEventListener('click', resetFilters);
     $('#q').addEventListener('input', e => { S.q = e.target.value; refresh(); });
 
     document.querySelectorAll('[data-view]').forEach(tab => {
@@ -1153,10 +1053,7 @@
       save();
       err.textContent = '';
       e.target.reset();
-      const abs = Math.abs(signed);
       const hidden = (S.selectedMonth && !date.startsWith(S.selectedMonth)) ||
-        (S.dateFrom && date < S.dateFrom) || (S.dateTo && date > S.dateTo) ||
-        (S.amtMin && abs < S.amtMin) || (S.amtMax != null && abs > S.amtMax) ||
         (S.q && !(desc + ' ' + L.merchant(desc)).toLowerCase().includes(S.q.toLowerCase()));
       setMsg(hidden ? 'Added “' + desc + '”. It is hidden by the current filters.' : 'Added “' + desc + '”.', 'ok');
       refresh();
@@ -1171,8 +1068,6 @@
     load();
     applyTheme(S.theme);
     syncControls();
-    const cat = $('#catFilter');
-    cat.innerHTML = '<option value="">All categories</option>' + catOptions('');
     const budgetCat = $('#budgetCategory');
     budgetCat.innerHTML = L.categoryGroups().map(group => {
       const cats = group.categories.filter(c => c.role === 'spend');

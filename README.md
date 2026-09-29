@@ -11,7 +11,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
 - The importer is at the top, then the months list, then the year filter, month filter, and Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending is the default tab. Settings holds the title, theme, amount style, export, backup, and the privacy note. The selected menu follows that month. The default month is the current month when the data has it, otherwise the latest month
-- Search, plus date, amount, and category filters inside that month
+- Search inside the selected month
 - Monthly budgets and savings goals on their own tabs, so the spending view stays uncluttered
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
 - Savings goals with a target, amount saved, optional deadline, and progress
