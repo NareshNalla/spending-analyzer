@@ -575,6 +575,35 @@ test('subscriptions is a selectable category for streaming, cloud, and gym', () 
   assert.equal(L.summarize(rows).totalSpend, 64.99);
 });
 
+test('haircut and body care are separate spending categories', () => {
+  assert.equal(L.autoCategory('HAIRCUT'), 'Haircut');
+  assert.equal(L.autoCategory('HAIR CARE PRODUCTS'), 'Haircut');
+  assert.equal(L.autoCategory('SALON VISIT'), 'Haircut');
+  assert.equal(L.autoCategory('BARBER SHOP'), 'Haircut');
+  assert.equal(L.autoCategory('BODY CARE'), 'Body care');
+  assert.equal(L.autoCategory('SPA DAY'), 'Body care');
+  assert.equal(L.autoCategory('GROOMING'), 'Body care');
+  const hair = L.categories().find(c => c.name === 'Haircut');
+  const body = L.categories().find(c => c.name === 'Body care');
+  assert.equal(hair.group, 'Lifestyle');
+  assert.equal(body.group, 'Lifestyle');
+  assert.equal(hair.role, 'spend');
+  assert.equal(body.role, 'spend');
+  const names = L.categoryGroups().find(group => group.name === 'Lifestyle').categories.map(c => c.name);
+  assert.ok(names.indexOf('Haircut') < names.indexOf('Shopping'));
+  assert.ok(names.indexOf('Body care') < names.indexOf('Shopping'));
+  const { rows } = L.decorate([
+    { date: '2026-09-02', desc: 'BARBER SHOP', raw: -25 },
+    { date: '2026-09-03', desc: 'SPA DAY', raw: 40 }
+  ], 'bank', {});
+  assert.equal(rows[0].c, 'Haircut');
+  assert.equal(rows[1].c, 'Body care');
+  assert.equal(L.isSpend(rows[0]), true);
+  assert.equal(L.isIncome(rows[0]), false);
+  assert.equal(L.isSpend(rows[1]), true);
+  assert.equal(L.summarize(rows).totalSpend, 65);
+});
+
 test('car lease, car emi, general emi, and car charging are separate', () => {
   assert.equal(L.autoCategory('CAR LEASE PAYMENT'), 'Car Lease');
   assert.equal(L.autoCategory('VEHICLE LEASE'), 'Car Lease');
