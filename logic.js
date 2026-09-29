@@ -64,6 +64,7 @@
     ['Festivals & Pooja', '#a21caf', /pooja|\bpuja\b|diwali|navratri|\bfestival\b/i, '✦', 'Family & religious', 'spend'],
     ['Temple / Donations', '#a21caf', /temple|donation|tirupati|gurudwara|\bchurch\b|mosque/i, '✦', 'Family & religious', 'spend'],
     ['Family Support', '#a21caf', /family support|sending money home|money home/i, '✦', 'Family & religious', 'spend', 'Family Support / Sending Money Home'],
+    ['Gift', '#a21caf', /\bgifts?\b|\bpresents?\b|shagun|gift\s?card|gift\s?shop|\bhamper\b/i, '✦', 'Family & religious', 'spend'],
     ['Gifts', '#a21caf', /\bgifts?\b/i, '✦', 'Family & religious', 'spend'],
     ['Wedding & Functions', '#a21caf', /wedding|function hall|\bmarriage\b/i, '✦', 'Family & religious', 'spend'],
     ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|hotstar|sonyliv|zee5|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|\bsubscription\b|patreon|icloud/i, '▶', 'Lifestyle', 'spend', 'Entertainment / OTT'],

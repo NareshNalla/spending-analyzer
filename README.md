@@ -10,8 +10,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Import CSV files and text bank-statement PDFs
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
-- Year filter, month filter, and the Spending, Monthly budgets, and Savings goals tabs share one bar at the top of the page. Totals, categories, merchants, transactions, projections, budgets, and savings follow that month. The default is the current month when the data has it, otherwise the latest month
-- Under Spending, a year-then-month list comes first. Choosing a month there updates the rest of the page. Categories, the chart, and transactions follow below
+- The importer is at the top, then the months list, then the year filter, month filter, and Spending, Monthly budgets, and Savings goals menu. The selected menu’s totals, categories, transactions, projections, budgets, and savings follow that month. The default is the current month when the data has it, otherwise the latest month
 - Search, plus date, amount, and category filters inside that month
 - Monthly budgets and savings goals on their own tabs, so the spending view stays uncluttered
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
@@ -55,8 +54,8 @@ Then open `http://127.0.0.1:8765/`.
 1. Drop a statement on the importer, press Enter on that box to choose files, or **Load sample data**.
 2. Check the amount style in the header. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
-4. Use the year and month filters in the top bar, next to the Spending, Monthly budgets, and Savings goals tabs. Under Spending, the months list is first. Totals, categories, transactions, projections, budgets, and savings use the selected month.
-5. Open **Monthly budgets** or **Savings goals** from the tabs under the importer. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Changing a category updates that row only, unless you check “Also all” for that merchant.
+4. Below the importer, use the months list, then the year and month filters and the Spending, Monthly budgets, and Savings goals menu. Totals, categories, transactions, projections, budgets, and savings use the selected month.
+5. Open **Monthly budgets** or **Savings goals** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Changing a category updates that row only, unless you check “Also all” for that merchant.
 6. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
 ### CSV files

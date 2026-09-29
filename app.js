@@ -739,6 +739,7 @@
       const planned = Object.keys(S.budgets).length || S.goals.length;
       empty.hidden = !!planned;
       dashboard.hidden = !planned;
+      $('#monthSection').hidden = true;
       if (!planned) $('#periodBar').hidden = true;
       if (planned) {
         renderPeriodBar();
@@ -760,6 +761,7 @@
     }
     empty.hidden = true;
     dashboard.hidden = false;
+    $('#monthSection').hidden = false;
     renderPeriodBar();
     alignDatesToPeriod();
     const view = currentView();
@@ -1054,6 +1056,14 @@
       ingest([...e.dataTransfer.files]);
     });
 
+    $('#monthSection').addEventListener('click', e => {
+      const month = e.target.closest('[data-month]');
+      if (!month || month.dataset.month === S.selectedMonth) return;
+      S.selectedMonth = month.dataset.month;
+      planSig = '';
+      save();
+      refresh();
+    });
     $('#loadSample').addEventListener('click', addSample);
     $('#loadSampleMore').addEventListener('click', addSample);
     $('#dateFrom').addEventListener('change', e => { S.dateFrom = e.target.value; save(); refresh(); });
@@ -1101,14 +1111,6 @@
     $('#dashboard').addEventListener('click', e => {
       const del = e.target.closest('[data-del]');
       if (del) { removeTxn(del.dataset.del); return; }
-      const month = e.target.closest('[data-month]');
-      if (month && month.dataset.month !== S.selectedMonth) {
-        S.selectedMonth = month.dataset.month;
-        planSig = '';
-        save();
-        refresh();
-        return;
-      }
       const th = e.target.closest('th[data-sort]');
       if (!th || !th.closest('#panel, #monthDetail')) return;
       const key = th.dataset.sort;
