@@ -451,6 +451,43 @@ test('savings and credit-card bills are not spending', () => {
   assert.equal(L.isSpend(rows.find(t => t.desc.startsWith('CREDIT'))), false);
 });
 
+test('similar payees ignore changing references and stay inside a ten dollar band', () => {
+  const vinay = 'Zelle Payment To Vinay Vidyamari Jpm99Cx547X6Zelle Vinay this recharge';
+  const vinayOtherCode = 'Zelle Payment To Vinay Vidyamari Qw88Lm22AaZelle Vinay';
+  const vinayUpi = 'UPI/VINAY VIDYAMARI/441298';
+  const vinayLeadingCode = 'Jpm99Cx547X6 Zelle Payment To Vinay Vidyamari';
+  const vinayFar = 'Zelle Payment To Vinay Vidyamari Zz10Kk30BbZelle Vinay';
+  const anita = 'Zelle Payment To Anita Sharma Ab12Cd34Zelle';
+  assert.equal(L.payeeKey(vinay), 'vinay vidyamari');
+  assert.equal(L.payeeKey(vinay), L.payeeKey(vinayOtherCode));
+  assert.equal(L.payeeKey(vinay), L.payeeKey(vinayUpi));
+  assert.equal(L.payeeKey(vinay), L.payeeKey(vinayLeadingCode));
+  assert.equal(L.payeeKey(vinay), L.payeeKey(vinayFar));
+  assert.equal(L.payeeLabel(vinay), 'Vinay Vidyamari');
+  assert.notEqual(L.payeeKey(vinay), L.payeeKey(anita));
+  assert.equal(L.merchant('ZELLE PAYMENT TO JORDAN'), 'Zelle Jordan');
+  assert.notEqual(L.merchant(vinay), L.merchant(vinayLeadingCode));
+
+  const rules = L.upsertSimilar([], L.payeeKey(vinay), 50, 'Mobile Recharge');
+  const cat = (desc, raw) => L.categoryOf({ desc, raw, m: L.merchant(desc) }, {}, rules);
+  assert.equal(cat(vinay, -50), 'Mobile Recharge');
+  assert.equal(cat(vinayOtherCode, -47), 'Mobile Recharge');
+  assert.equal(cat(vinayUpi, -55), 'Mobile Recharge');
+  assert.equal(cat(vinayLeadingCode, -52), 'Mobile Recharge');
+  assert.equal(cat(vinayOtherCode, -60), 'Mobile Recharge');
+  assert.notEqual(cat(vinayOtherCode, -60.01), 'Mobile Recharge');
+  assert.notEqual(cat(vinayFar, -70), 'Mobile Recharge');
+  assert.equal(cat('KROGER #123', -48), 'Groceries');
+  assert.notEqual(cat(anita, -50), 'Mobile Recharge');
+  assert.equal(L.categoryOf({ desc: vinay, raw: -50, m: 'x', oc: 'Dining' }, {}, rules), 'Dining');
+  assert.equal(L.categoryOf({ desc: vinay, raw: -50, m: 'Zelle Vinay' }, { 'Zelle Vinay': 'Transfers' }, rules), 'Transfers');
+  const kept = L.normalizeSimilar(rules);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].p, 'vinay vidyamari');
+  assert.equal(kept[0].a, 50);
+  assert.equal(kept[0].c, 'Mobile Recharge');
+});
+
 test('months group by year and projections are labeled from pace', () => {
   const { rows } = L.decorate(L.SAMPLE_HISTORY, 'bank', {});
   const years = L.monthsByYear(rows);

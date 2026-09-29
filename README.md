@@ -17,7 +17,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Savings goals with a target, amount saved, optional deadline, and progress
 - Spending and savings projections, labeled as estimates
 - A Savings category for money moved to savings or investments, kept out of spending
-- Change one transaction’s category without changing the rest, or check “Also all {merchant}” to update every row from that merchant
+- Change one transaction’s category without changing the rest, check “Also all {merchant}” to update every row from that merchant, or check “Also similar payments to this person (amount within $10)” so the same person matches across Zelle, UPI, and other payment descriptions when the reference code changes. That choice is saved for later imports in the same amount band
 - Categories for housing, utilities, household help, food, transport, family, education, health, loans, and savings, including common Indian descriptions. Older names such as Groceries and Housing still work
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
