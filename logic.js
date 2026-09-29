@@ -780,7 +780,7 @@
     rows.filter(isSpend).forEach(t => {
       map[t.c] = round2((map[t.c] || 0) + magnitude(t));
     });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+    return Object.entries(map).filter(([, value]) => value !== 0).sort((a, b) => b[1] - a[1]);
   }
 
   function summarizeMonths(rows) {

@@ -244,7 +244,7 @@ input[type="search"] { width: 100%; }
 .pair i.out { background: var(--neg); }
 .pair i.save { background: var(--save); }
 
-.cat-list { display: grid; gap: 4px; margin-top: 8px; max-height: 360px; overflow: auto; }
+.cat-list { display: grid; gap: 4px; margin-top: 8px; }
 .bar {
   width: 100%;
   display: grid;

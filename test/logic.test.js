@@ -718,3 +718,36 @@ test('category decides income and spending, not the amount sign', () => {
   assert.equal(summary.months[0].spend, 1740);
   assert.equal(summary.months[0].savings, 200);
 });
+
+test('category totals list every non-zero spending category', () => {
+  const { rows } = L.decorate([
+    { date: '2026-09-01', desc: 'RENT PAYMENT', raw: 10 },
+    { date: '2026-09-02', desc: 'KROGER', raw: -0.01 },
+    { date: '2026-09-03', desc: 'STARBUCKS', raw: 4 },
+    { date: '2026-09-04', desc: 'SHELL OIL', raw: 5 },
+    { date: '2026-09-05', desc: 'BESCOM ELECTRICITY', raw: 6 },
+    { date: '2026-09-06', desc: 'NETFLIX.COM', raw: 7 },
+    { date: '2026-09-07', desc: 'AMAZON MARKETPLACE', raw: 8 },
+    { date: '2026-09-08', desc: 'DELTA AIRLINES', raw: 9 },
+    { date: '2026-09-09', desc: 'BIRTHDAY GIFT', raw: 11 },
+    { date: '2026-09-10', desc: 'SCHOOL FEE', raw: 12 },
+    { date: '2026-09-11', desc: 'CVS PHARMACY', raw: 13 },
+    { date: '2026-09-12', desc: 'CITY PARKING', raw: 14 },
+    { date: '2026-09-13', desc: 'CAR LEASE PAYMENT', raw: 15 },
+    { date: '2026-09-14', desc: 'EMI XYZ', raw: 16 },
+    { date: '2026-09-15', desc: 'COMCAST INTERNET', raw: 17 },
+    { date: '2026-09-16', desc: 'PAYROLL ACME', raw: 3000 },
+    { date: '2026-09-17', desc: 'TRANSFER TO SAVINGS', raw: -200 },
+    { date: '2026-09-18', desc: 'ZELLE LEND TO VINAY', raw: -40 },
+    { date: '2026-09-19', desc: 'ZERO FEE', raw: 0 }
+  ], 'bank', {});
+  const names = L.summarize(rows).categories.map(([name]) => name);
+  assert.deepEqual(names, [
+    'Internet', 'EMI', 'Car Lease', 'Parking', 'Medical / Pharmacy', 'School Fees',
+    'Gift', 'Rent', 'Travel', 'Shopping', 'Subscriptions', 'Electricity', 'Fuel', 'Dining', 'Groceries'
+  ]);
+  assert.equal(names.includes('Income'), false);
+  assert.equal(names.includes('Savings'), false);
+  assert.equal(names.includes('Lend'), false);
+  assert.equal(names.includes('Fees'), false);
+});
