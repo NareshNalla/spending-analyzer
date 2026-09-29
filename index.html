@@ -18,6 +18,15 @@
 </head>
 <body>
   <div class="wrap">
+    <div class="period-bar" id="periodBar" hidden>
+      <label>Year
+        <select id="periodYear" aria-label="Year"></select>
+      </label>
+      <label>Month
+        <select id="periodMonth" aria-label="Month"></select>
+      </label>
+      <p class="detail" id="periodHint">Choose a year and month. The rest of the page uses only that month.</p>
+    </div>
     <header class="header">
       <div>
         <div class="eyebrow">On this device only</div>
@@ -62,36 +71,16 @@
     </section>
 
     <section id="dashboard" hidden>
+      <div class="main-tabs" role="tablist" aria-label="Sections">
+        <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
+        <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
+        <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
+      </div>
+
+      <div id="sectionSpend">
       <p class="meta" id="modeHint"></p>
       <div class="stats" id="stats"></div>
       <div class="insights" id="insights"></div>
-
-      <section class="split" id="plan" aria-label="Budgets and savings goals">
-        <section class="card">
-          <h3>Monthly budgets</h3>
-          <p class="detail" id="budgetMonth">Set a monthly limit for a spending category.</p>
-          <div id="budgetAlerts" role="status"></div>
-          <div id="budgetList"></div>
-          <form class="plan-form" id="budgetForm">
-            <label>Category <select name="category" id="budgetCategory"></select></label>
-            <label>Limit <input name="limit" type="number" min="0.01" step="0.01" required placeholder="400"></label>
-            <button type="submit" class="primary">Save budget</button>
-          </form>
-        </section>
-        <section class="card">
-          <h3>Savings goals</h3>
-          <p class="detail">Record money you have set aside. This is your own tally, not a bank balance.</p>
-          <div id="goalList"></div>
-          <form class="plan-form goal-form" id="goalForm">
-            <label>Name <input name="name" required maxlength="80" placeholder="Emergency fund" autocomplete="off"></label>
-            <label>Target <input name="target" type="number" min="0.01" step="0.01" required></label>
-            <label>Saved <input name="saved" type="number" min="0" step="0.01" value="0"></label>
-            <label>Deadline <input name="deadline" type="date"></label>
-            <button type="submit" class="primary">Add goal</button>
-          </form>
-        </section>
-        <p class="error" id="planError" role="status"></p>
-      </section>
 
       <div class="filters">
         <div class="filter-grid">
@@ -107,7 +96,7 @@
 
       <div class="split">
         <section class="card">
-          <h3>Income and spending by month</h3>
+          <h3 id="chartTitle">Income and spending by month</h3>
           <div class="chart-box"><canvas id="monthChart" aria-label="Monthly income and spending" role="img"></canvas></div>
           <div class="chart-fallback" id="chartFallback" hidden></div>
           <div class="legend"><span><b class="pos">Income</b> excluding transfers</span><span><b class="neg">Spending</b> excluding transfers and savings</span><span><b class="save">Savings</b> set aside</span></div>
@@ -125,20 +114,13 @@
         <div class="proj-grid" id="projections"></div>
       </section>
 
-      <section class="card" id="monthSection" aria-label="Months by year">
-        <h3>Months</h3>
-        <p class="detail">Grouped by year, newest first. Open a month for its transactions and categories. Savings is money moved to savings or investments, not an expense.</p>
-        <div id="monthTree"></div>
-        <div id="monthDetail"></div>
-      </section>
-
-      <section class="card" id="recurCard">
+      <section class="card" id="recurCard" hidden>
         <h3>Repeating spend</h3>
         <p class="detail">Merchants with purchases in two or more months of this view.</p>
         <ul class="recur" id="recur"></ul>
       </section>
 
-      <div class="tabs" role="tablist" aria-label="Views">
+      <div class="tabs" role="tablist" aria-label="Lists">
         <button type="button" class="tab active" data-view="tx" role="tab" aria-selected="true">Transactions</button>
         <button type="button" class="tab" data-view="mer" role="tab" aria-selected="false">Merchants</button>
         <button type="button" class="tab" data-view="cat" role="tab" aria-selected="false">Categories</button>
@@ -169,6 +151,38 @@
       </details>
 
       <div class="card" id="panel"></div>
+      </div>
+
+      <div id="sectionBudgets" hidden>
+        <section class="card">
+          <h3>Monthly budgets</h3>
+          <p class="detail" id="budgetMonth">Set a monthly limit for a spending category.</p>
+          <div id="budgetAlerts" role="status"></div>
+          <div id="budgetList"></div>
+          <form class="plan-form" id="budgetForm">
+            <label>Category <select name="category" id="budgetCategory"></select></label>
+            <label>Limit <input name="limit" type="number" min="0.01" step="0.01" required placeholder="400"></label>
+            <button type="submit" class="primary">Save budget</button>
+          </form>
+          <p class="error" id="planError" role="status"></p>
+        </section>
+      </div>
+
+      <div id="sectionGoals" hidden>
+        <section class="card">
+          <h3>Savings goals</h3>
+          <p class="detail">Record money you have set aside. This is your own tally, not a bank balance, so it stays as you entered it when you change the month.</p>
+          <div id="goalList"></div>
+          <form class="plan-form goal-form" id="goalForm">
+            <label>Name <input name="name" required maxlength="80" placeholder="Emergency fund" autocomplete="off"></label>
+            <label>Target <input name="target" type="number" min="0.01" step="0.01" required></label>
+            <label>Saved <input name="saved" type="number" min="0" step="0.01" value="0"></label>
+            <label>Deadline <input name="deadline" type="date"></label>
+            <button type="submit" class="primary">Add goal</button>
+          </form>
+          <p class="error" id="goalError" role="status"></p>
+        </section>
+      </div>
     </section>
 
     <footer class="footer">

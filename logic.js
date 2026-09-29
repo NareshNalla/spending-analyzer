@@ -800,14 +800,57 @@
     return new Date(y, m, 0).getDate();
   }
 
-  function projections(rows, today) {
+  function defaultPeriod(months, today) {
+    const list = [...new Set(months || [])].filter(month => /^\d{4}-\d{2}$/.test(month)).sort();
+    if (!list.length) return '';
     const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
-    const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    const elapsed = now.getDate();
-    const dim = daysInMonth(currentMonth);
+    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    return list.includes(current) ? current : list[list.length - 1];
+  }
+
+  function projections(rows, today, focusMonth) {
+    const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
+    const calendarMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
     const months = summarizeMonths(rows);
-    const current = months.find(item => item.month === currentMonth) || null;
-    const finished = months.filter(item => item.month < currentMonth);
+    if (focusMonth && /^\d{4}-\d{2}$/.test(focusMonth)) {
+      const focus = months.find(item => item.month === focusMonth) || null;
+      const dim = daysInMonth(focusMonth);
+      const elapsed = focusMonth === calendarMonth ? Math.min(now.getDate(), dim) : dim;
+      const extend = (amount) => {
+        const value = amount || 0;
+        if (!focus || focusMonth !== calendarMonth || elapsed < 1) return round2(value);
+        return round2(value / elapsed * dim);
+      };
+      const monthSpend = extend(focus && focus.spend);
+      const monthIncome = extend(focus && focus.income);
+      const monthSavings = extend(focus && focus.savings);
+      return {
+        estimate: true,
+        scoped: true,
+        finished: focusMonth < calendarMonth,
+        currentMonth: focusMonth,
+        currentLabel: formatMonth(focusMonth, true),
+        elapsed: focusMonth > calendarMonth ? 0 : elapsed,
+        days: dim,
+        spentSoFar: focus ? focus.spend : 0,
+        incomeSoFar: focus ? focus.income : 0,
+        savedSoFar: focus ? focus.savings : 0,
+        projectedMonthSpend: focus ? monthSpend : null,
+        projectedMonthIncome: focus ? monthIncome : null,
+        projectedMonthSavings: focus ? monthSavings : null,
+        averageMonthSpend: monthSpend,
+        averageMonthIncome: monthIncome,
+        averageMonthSavings: monthSavings,
+        projectedYearSpend: round2(monthSpend * 12),
+        projectedYearIncome: round2(monthIncome * 12),
+        projectedYearSavings: round2(monthSavings * 12),
+        basedOn: [focusMonth]
+      };
+    }
+    const elapsed = now.getDate();
+    const dim = daysInMonth(calendarMonth);
+    const current = months.find(item => item.month === calendarMonth) || null;
+    const finished = months.filter(item => item.month < calendarMonth);
     const recent = finished.slice(-3);
     const average = key => recent.length
       ? round2(recent.reduce((sum, item) => sum + item[key], 0) / recent.length)
@@ -822,8 +865,8 @@
     const avgSavings = average('savings');
     return {
       estimate: true,
-      currentMonth,
-      currentLabel: formatMonth(currentMonth, true),
+      currentMonth: calendarMonth,
+      currentLabel: formatMonth(calendarMonth, true),
       elapsed,
       days: dim,
       spentSoFar: current ? current.spend : 0,
@@ -1028,6 +1071,7 @@
     summarize,
     summarizeMonths,
     monthsByYear,
+    defaultPeriod,
     projections,
     exportCsv,
     migrate,

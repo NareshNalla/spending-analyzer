@@ -23,6 +23,7 @@
     amtMax: null,
     theme: 'auto',
     selectedMonth: '',
+    section: 'spend',
     budgets: {},
     goals: []
   };
@@ -62,6 +63,7 @@
       amx: S.amtMax,
       th: S.theme,
       sm: S.selectedMonth,
+      sec: S.section,
       v: S.view,
       b: S.budgets,
       g: S.goals
@@ -89,6 +91,7 @@
     S.amtMax = (d.amx == null || Number(d.amx) === 999999) ? null : Number(d.amx);
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
+    S.section = ['spend', 'budgets', 'goals'].includes(d.sec) ? d.sec : 'spend';
     if (d.v === 'month') S.view = 'tx';
     else if (['tx', 'mer', 'cat'].includes(d.v)) S.view = d.v;
     S.budgets = L.normalizeBudgets(d.b);
@@ -133,17 +136,80 @@
     return { text: pick('--mut'), grid: pick('--grid'), income: pick('--pos'), spend: pick('--neg'), save: pick('--save') };
   }
 
+  function periodMonths() {
+    const seen = new Set();
+    S.txns.forEach(t => {
+      const month = String(t.date || '').slice(0, 7);
+      if (/^\d{4}-\d{2}$/.test(month)) seen.add(month);
+    });
+    return [...seen].sort();
+  }
+
+  function ensurePeriod() {
+    const months = periodMonths();
+    if (!months.length) {
+      S.selectedMonth = '';
+      return;
+    }
+    if (!months.includes(S.selectedMonth)) S.selectedMonth = L.defaultPeriod(months, new Date());
+  }
+
+  function periodBounds() {
+    if (!/^\d{4}-\d{2}$/.test(S.selectedMonth)) return { from: '', to: '' };
+    return { from: S.selectedMonth + '-01', to: S.selectedMonth + '-31' };
+  }
+
+  function alignDatesToPeriod() {
+    const bounds = periodBounds();
+    if (!bounds.from) return;
+    const from = S.dateFrom;
+    const to = S.dateTo;
+    const start = from || bounds.from;
+    const end = to || bounds.to;
+    if (start > bounds.to || end < bounds.from) {
+      S.dateFrom = '';
+      S.dateTo = '';
+    } else {
+      if (from && from < bounds.from) S.dateFrom = bounds.from;
+      if (to && to > bounds.to) S.dateTo = bounds.to;
+    }
+    const fromEl = $('#dateFrom');
+    const toEl = $('#dateTo');
+    if (fromEl) {
+      fromEl.min = bounds.from;
+      fromEl.max = bounds.to;
+      if (document.activeElement !== fromEl) fromEl.value = S.dateFrom;
+    }
+    if (toEl) {
+      toEl.min = bounds.from;
+      toEl.max = bounds.to;
+      if (document.activeElement !== toEl) toEl.value = S.dateTo;
+    }
+    if (from !== S.dateFrom || to !== S.dateTo) save();
+  }
+
   function currentView() {
+    ensurePeriod();
     const decorated = L.decorate(S.txns, S.mode, S.rules);
-    const filtered = L.filterRows(decorated.rows, {
+    const bounds = periodBounds();
+    const inPeriod = bounds.from
+      ? decorated.rows.filter(t => t.date >= bounds.from && t.date <= bounds.to)
+      : decorated.rows;
+    let from = S.dateFrom;
+    let to = S.dateTo;
+    if (bounds.from) {
+      if (!from || from < bounds.from) from = bounds.from;
+      if (!to || to > bounds.to) to = bounds.to;
+    }
+    const filtered = L.filterRows(inPeriod, {
       q: S.q,
       cat: S.cat,
-      dateFrom: S.dateFrom,
-      dateTo: S.dateTo,
+      dateFrom: from,
+      dateTo: to,
       amtMin: S.amtMin,
       amtMax: S.amtMax
     });
-    return { mode: decorated.mode, all: decorated.rows, filtered, summary: L.summarize(filtered) };
+    return { mode: decorated.mode, all: inPeriod, filtered, summary: L.summarize(filtered) };
   }
 
   function addTransactions(records, sourceName) {
@@ -493,69 +559,27 @@
       body + '</tbody></table></div>';
   }
 
-  function renderMonths(rows) {
-    const host = $('#monthTree');
-    const detail = $('#monthDetail');
-    const years = L.monthsByYear(rows);
-    if (!years.length) {
-      host.innerHTML = '<p class="panel-empty">No dated transactions in this view.</p>';
-      detail.innerHTML = '';
-      return;
+  function projectionNote(report) {
+    if (report.finished) {
+      return 'Estimates from ' + report.currentLabel + ' only. That month is finished, so the month figures are the actual totals. Yearly figures repeat this month twelve times.';
     }
-    const known = years.some(year => year.months.some(item => item.month === S.selectedMonth));
-    if (!known) S.selectedMonth = years[0].months[0].month;
-    host.innerHTML = years.map(year => {
-      const open = year.months.some(item => item.month === S.selectedMonth) ? ' open' : '';
-      const list = year.months.map(item => {
-        const active = item.month === S.selectedMonth ? ' active' : '';
-        return '<button type="button" class="month-row' + active + '" data-month="' + item.month + '">' +
-          '<span>' + esc(L.monthTick(item.month, false)) + '</span>' +
-          '<span class="neg">Spend ' + esc(fmt(item.spend)) + '</span>' +
-          '<span class="pos">In ' + esc(fmt(item.income)) + '</span>' +
-          '<span>Saved ' + esc(fmt(item.savings)) + '</span>' +
-          '<strong>Net ' + esc(fmt(item.net)) + '</strong></button>';
-      }).join('');
-      return '<details class="year-block"' + open + '><summary><span>' + esc(year.year) + '</span>' +
-        '<span>Spend ' + esc(fmt(year.spend)) + '</span><span>Saved ' + esc(fmt(year.savings)) +
-        '</span><span>Net ' + esc(fmt(year.net)) + '</span></summary><div class="month-list">' + list + '</div></details>';
-    }).join('');
-    const monthRows = rows.filter(t => String(t.date).startsWith(S.selectedMonth));
-    const monthSummary = L.summarize(monthRows);
-    const transfers = monthRows.filter(t => L.categoryRole(t.c) === 'transfer').length;
-    const cats = monthSummary.categories.map(([name, value]) => {
-      const share = monthSummary.totalSpend ? (value / monthSummary.totalSpend) * 100 : 0;
-      return '<tr><td>' + esc((MARK[name] || '') + ' ' + name) + '</td><td class="num">' + esc(fmt(value)) +
-        '</td><td class="num">' + share.toFixed(1) + '%</td></tr>';
-    }).join('');
-    detail.innerHTML = '<h3>' + esc(L.formatMonth(S.selectedMonth, true)) + '</h3>' +
-      '<p class="detail">' + monthRows.length + ' transactions. Spending ' + esc(fmt(monthSummary.totalSpend)) +
-      ', income ' + esc(fmt(monthSummary.totalIncome)) +
-      ', savings ' + esc(fmt(monthSummary.totalSavings || 0)) +
-      ', net ' + esc(fmt(monthSummary.net)) +
-      (transfers ? '. ' + transfers + ' transfer' + (transfers === 1 ? '' : 's') + ' left out of those totals' : '') +
-      '.</p>' +
-      '<div class="table-wrap"><table><thead><tr><th>Category</th><th class="num">Spending</th><th class="num">Share</th></tr></thead><tbody>' +
-      (cats || '<tr><td colspan="3">No spending this month.</td></tr>') +
-      '</tbody></table></div>' + txnTable(monthRows);
+    if (!report.elapsed) {
+      return 'Estimates from ' + report.currentLabel + ' only. That month has not started, so these are the transactions already dated in it. Yearly figures repeat them twelve times.';
+    }
+    return 'Estimates from ' + report.currentLabel + ' only, not actuals for other months. End-of-month pace uses day ' + report.elapsed + ' of ' + report.days + '. Yearly figures repeat that pace twelve times.';
   }
 
   function renderProjections(rows) {
-    const report = L.projections(rows, new Date());
-    const basis = report.basedOn.length
-      ? 'Monthly and yearly figures average ' + report.basedOn.map(month => L.formatMonth(month, false)).join(', ') + '.'
-      : 'Add a month before this one to estimate a monthly average.';
-    const pace = report.projectedMonthSpend == null
-      ? 'No spending recorded yet in ' + report.currentLabel + ', so the end-of-month pace is blank.'
-      : 'End-of-month pace uses day ' + report.elapsed + ' of ' + report.days + ' in ' + report.currentLabel + '.';
-    $('#projNote').textContent = 'Estimates, not actuals. ' + pace + ' ' + basis;
+    const report = L.projections(rows, new Date(), S.selectedMonth);
+    $('#projNote').textContent = projectionNote(report);
     const shown = value => value == null ? '—' : fmt(value);
     $('#projections').innerHTML = [
-      stat('spend', 'EOM spend', shown(report.projectedMonthSpend), 'Estimate from pace. So far ' + fmt(report.spentSoFar)),
-      stat('net', 'EOM savings', shown(report.projectedMonthSavings), 'Estimate from pace. So far ' + fmt(report.savedSoFar)),
-      stat('avg', 'Typical month', fmt(report.averageMonthSpend), 'Estimate. Recent average spending'),
-      stat('income', 'Typical savings', fmt(report.averageMonthSavings), 'Estimate. Recent average set aside'),
-      stat('spend', 'Year spending', fmt(report.projectedYearSpend), 'Estimate. Monthly average × 12'),
-      stat('net', 'Year savings', fmt(report.projectedYearSavings), 'Estimate. Monthly average × 12')
+      stat('spend', 'EOM spend', shown(report.projectedMonthSpend), 'Estimate. So far ' + fmt(report.spentSoFar)),
+      stat('net', 'EOM savings', shown(report.projectedMonthSavings), 'Estimate. So far ' + fmt(report.savedSoFar)),
+      stat('avg', 'This month spend', fmt(report.averageMonthSpend), 'Estimate for the selected month'),
+      stat('income', 'This month savings', fmt(report.averageMonthSavings), 'Estimate for the selected month'),
+      stat('spend', 'Year spending', fmt(report.projectedYearSpend), 'Estimate. This month × 12'),
+      stat('net', 'Year savings', fmt(report.projectedYearSavings), 'Estimate. This month × 12')
     ].join('');
   }
 
@@ -578,7 +602,11 @@
   }
 
   function renderPlan(rows) {
-    const report = L.planReport(rows, S.budgets, S.goals, { dateFrom: S.dateFrom, dateTo: S.dateTo });
+    const bounds = periodBounds();
+    const report = L.planReport(rows, S.budgets, S.goals, {
+      dateFrom: bounds.from || S.dateFrom,
+      dateTo: bounds.to || S.dateTo
+    });
     const sig = JSON.stringify(report);
     if (sig === planSig) return;
     planSig = sig;
@@ -615,11 +643,64 @@
   }
 
   function syncTabs() {
-    document.querySelectorAll('.tab').forEach(tab => {
+    document.querySelectorAll('[data-view]').forEach(tab => {
       const on = tab.dataset.view === S.view;
       tab.classList.toggle('active', on);
       tab.setAttribute('aria-selected', on ? 'true' : 'false');
     });
+    document.querySelectorAll('[data-section]').forEach(tab => {
+      const on = tab.dataset.section === S.section;
+      tab.classList.toggle('active', on);
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const spend = $('#sectionSpend');
+    const budgets = $('#sectionBudgets');
+    const goals = $('#sectionGoals');
+    if (spend) spend.hidden = S.section !== 'spend';
+    if (budgets) budgets.hidden = S.section !== 'budgets';
+    if (goals) goals.hidden = S.section !== 'goals';
+  }
+
+  function renderPeriodBar() {
+    const bar = $('#periodBar');
+    const months = periodMonths();
+    if (!months.length) {
+      bar.hidden = true;
+      return;
+    }
+    ensurePeriod();
+    bar.hidden = false;
+    const years = [...new Set(months.map(month => month.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
+    const year = S.selectedMonth.slice(0, 4);
+    const yearSel = $('#periodYear');
+    const monthSel = $('#periodMonth');
+    if (document.activeElement !== yearSel) {
+      yearSel.innerHTML = years.map(item =>
+        '<option value="' + item + '"' + (item === year ? ' selected' : '') + '>' + item + '</option>'
+      ).join('');
+    }
+    const inYear = months.filter(month => month.startsWith(year)).sort((a, b) => b.localeCompare(a));
+    if (document.activeElement !== monthSel) {
+      monthSel.innerHTML = inYear.map(month => {
+        const label = L.formatMonth(month, true).replace(/ \d{4}$/, '');
+        return '<option value="' + month + '"' + (month === S.selectedMonth ? ' selected' : '') + '>' + esc(label) + '</option>';
+      }).join('');
+    }
+    $('#periodHint').textContent = 'Everything below is ' + L.formatMonth(S.selectedMonth, true) + ' only.';
+  }
+
+  function chooseYear(year) {
+    const months = periodMonths().filter(month => month.startsWith(year)).sort();
+    if (!months.length) return;
+    const same = year + S.selectedMonth.slice(4);
+    const now = new Date();
+    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    if (months.includes(same)) S.selectedMonth = same;
+    else if (months.includes(current)) S.selectedMonth = current;
+    else S.selectedMonth = months[months.length - 1];
+    planSig = '';
+    save();
+    refresh();
   }
 
   function refresh() {
@@ -629,15 +710,15 @@
       const planned = Object.keys(S.budgets).length || S.goals.length;
       empty.hidden = !!planned;
       dashboard.hidden = !planned;
+      $('#periodBar').hidden = true;
       if (planned) {
         renderPlan([]);
+        syncTabs();
         $('#stats').innerHTML = '';
         $('#insights').innerHTML = '';
         $('#catBars').innerHTML = '';
         $('#recur').innerHTML = '';
         $('#panel').innerHTML = '<p class="panel-empty">Add a transaction to compare these plans with real spending.</p>';
-        $('#monthTree').innerHTML = '';
-        $('#monthDetail').innerHTML = '';
         $('#projections').innerHTML = '';
         $('#projNote').textContent = '';
         $('#resultMeta').textContent = '';
@@ -649,30 +730,32 @@
     }
     empty.hidden = true;
     dashboard.hidden = false;
+    renderPeriodBar();
+    alignDatesToPeriod();
     const view = currentView();
+    const monthSummary = L.summarize(view.all);
     const summary = view.summary;
+    const periodName = L.formatMonth(S.selectedMonth, true);
+    $('#chartTitle').textContent = 'Income and spending in ' + periodName;
     $('#modeHint').textContent = S.mode === 'auto'
       ? 'Amount style is auto: ' + (view.mode === 'bank' ? 'bank (negative amounts are money out)' : 'card (positive charges are money out)') + '. Change it if income and spending look swapped.'
       : (view.mode === 'bank' ? 'Bank style: negative amounts are money out.' : 'Card style: positive charges are money out.');
     $('#addHint').textContent = 'Saved with the current ' + view.mode + ' amount style, so the sign matches the other rows.';
-    renderStats(summary);
-    renderInsights(summary);
+    renderStats(monthSummary);
+    renderInsights(monthSummary);
     renderPlan(view.all);
-    renderProjections(view.filtered);
-    renderCategories(summary.categories, summary.totalSpend);
-    renderRecurring(summary.recurring);
+    renderProjections(view.all);
+    renderCategories(monthSummary.categories, monthSummary.totalSpend);
+    $('#recurCard').hidden = true;
     const warn = $('#filterWarn');
     if (S.dateFrom && S.dateTo && S.dateFrom > S.dateTo) {
       warn.hidden = false;
       warn.textContent = 'The start date is after the end date, so nothing can match.';
     } else warn.hidden = true;
-    const noun = view.all.length === 1 ? 'transaction' : 'transactions';
-    $('#resultMeta').textContent = view.filtered.length === view.all.length
-      ? view.all.length + ' ' + noun + '.'
-      : 'Showing ' + view.filtered.length + ' of ' + view.all.length + ' ' + noun + '.';
+    const noun = view.filtered.length === 1 ? 'transaction' : 'transactions';
+    $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + L.formatMonth(S.selectedMonth, true) + '.';
     syncTabs();
-    drawChart(summary.months);
-    renderMonths(view.filtered);
+    drawChart(monthSummary.months);
     renderPanel(view.filtered, summary);
     const cat = $('#catFilter');
     if (document.activeElement !== cat) cat.value = S.cat;
@@ -871,7 +954,7 @@
       const target = Number(data.get('target'));
       const saved = Number(data.get('saved') || 0);
       const deadline = L.parseDate(String(data.get('deadline') || ''), new Date().getFullYear()) || '';
-      const err = $('#planError');
+      const err = $('#goalError');
       if (name.length < 2) { err.textContent = 'Name the goal.'; return; }
       if (!Number.isFinite(target) || target <= 0) { err.textContent = 'Enter a target greater than zero.'; return; }
       if (String(data.get('deadline') || '') && !deadline) { err.textContent = 'Use a real deadline, or leave it blank.'; return; }
@@ -882,7 +965,7 @@
       save();
       refresh();
     });
-    $('#plan').addEventListener('click', e => {
+    $('#dashboard').addEventListener('click', e => {
       const budget = e.target.closest('[data-remove-budget]');
       if (budget) {
         delete S.budgets[budget.dataset.removeBudget];
@@ -899,7 +982,7 @@
         refresh();
       }
     });
-    $('#plan').addEventListener('submit', e => {
+    $('#dashboard').addEventListener('submit', e => {
       const form = e.target.closest('form.contrib');
       if (!form) return;
       e.preventDefault();
@@ -950,12 +1033,26 @@
     $('#resetFilters').addEventListener('click', resetFilters);
     $('#q').addEventListener('input', e => { S.q = e.target.value; refresh(); });
 
-    document.querySelectorAll('.tab').forEach(tab => {
+    document.querySelectorAll('[data-view]').forEach(tab => {
       tab.addEventListener('click', () => {
         S.view = tab.dataset.view;
         save();
         refresh();
       });
+    });
+    document.querySelectorAll('[data-section]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        S.section = tab.dataset.section;
+        save();
+        refresh();
+      });
+    });
+    $('#periodYear').addEventListener('change', e => chooseYear(e.target.value));
+    $('#periodMonth').addEventListener('change', e => {
+      S.selectedMonth = e.target.value;
+      planSig = '';
+      save();
+      refresh();
     });
 
     $('#catBars').addEventListener('click', e => {
@@ -973,8 +1070,6 @@
     $('#dashboard').addEventListener('click', e => {
       const del = e.target.closest('[data-del]');
       if (del) { removeTxn(del.dataset.del); return; }
-      const month = e.target.closest('[data-month]');
-      if (month) { S.selectedMonth = month.dataset.month; save(); refresh(); return; }
       const th = e.target.closest('th[data-sort]');
       if (!th || !th.closest('#panel, #monthDetail')) return;
       const key = th.dataset.sort;
@@ -1013,7 +1108,8 @@
       err.textContent = '';
       e.target.reset();
       const abs = Math.abs(signed);
-      const hidden = (S.dateFrom && date < S.dateFrom) || (S.dateTo && date > S.dateTo) ||
+      const hidden = (S.selectedMonth && !date.startsWith(S.selectedMonth)) ||
+        (S.dateFrom && date < S.dateFrom) || (S.dateTo && date > S.dateTo) ||
         (S.amtMin && abs < S.amtMin) || (S.amtMax != null && abs > S.amtMax) ||
         (S.q && !(desc + ' ' + L.merchant(desc)).toLowerCase().includes(S.q.toLowerCase()));
       setMsg(hidden ? 'Added “' + desc + '”. It is hidden by the current filters.' : 'Added “' + desc + '”.', 'ok');

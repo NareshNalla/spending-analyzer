@@ -10,9 +10,10 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Import CSV files and text bank-statement PDFs
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
-- Dashboard with a monthly chart, category bars, and a year-then-month view
-- Search, plus date, amount, and category filters
-- List merchants that show up in more than one month
+- Year and month filters at the top of the page. Totals, categories, merchants, transactions, projections, budgets, and savings follow that month. The default is the current month when the data has it, otherwise the latest month
+- Dashboard with a chart, category bars, and the transaction list for the selected month
+- Search, plus date, amount, and category filters inside that month
+- Monthly budgets and savings goals on their own tabs, so the spending view stays uncluttered
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
 - Savings goals with a target, amount saved, optional deadline, and progress
 - Spending and savings projections, labeled as estimates
@@ -56,8 +57,9 @@ Then open `http://127.0.0.1:8765/`.
 1. Drop a statement on the importer, press Enter on that box to choose files, or **Load sample data**.
 2. Check the amount style in the header. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
-4. Add a monthly budget or a savings goal on the dashboard. Budgets compare with the latest month in your data, or with the single month selected in the date filters. Changing a category updates that row only, unless you check “Also all” for that merchant.
-5. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
+4. Use the year and month filters at the top. Everything below them — totals, categories, transactions, projections, budgets, and savings — is that month only.
+5. Open **Monthly budgets** or **Savings goals** from the tabs under the importer. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Changing a category updates that row only, unless you check “Also all” for that merchant.
+6. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
 ### CSV files
 
