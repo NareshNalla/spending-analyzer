@@ -547,6 +547,34 @@ test('pooja, devotional, and festival are separate categories', () => {
   assert.equal(L.summarize(rows).totalSpend, 90);
 });
 
+test('subscriptions is a selectable category for streaming, cloud, and gym', () => {
+  assert.equal(L.autoCategory('NETFLIX.COM'), 'Subscriptions');
+  assert.equal(L.autoCategory('SPOTIFY USA'), 'Subscriptions');
+  assert.equal(L.autoCategory('AMAZON PRIME'), 'Subscriptions');
+  assert.equal(L.autoCategory('DISNEY HOTSTAR'), 'Subscriptions');
+  assert.equal(L.autoCategory('YOUTUBE PREMIUM'), 'Subscriptions');
+  assert.equal(L.autoCategory('ICLOUD'), 'Subscriptions');
+  assert.equal(L.autoCategory('GOOGLE ONE'), 'Subscriptions');
+  assert.equal(L.autoCategory('GYM MEMBERSHIP'), 'Subscriptions');
+  assert.equal(L.autoCategory('AMAZON MARKETPLACE'), 'Shopping');
+  const cat = L.categories().find(c => c.name === 'Subscriptions');
+  assert.equal(cat.label, 'Subscriptions');
+  assert.equal(cat.group, 'Lifestyle');
+  assert.equal(cat.role, 'spend');
+  const names = L.categoryGroups().find(group => group.name === 'Lifestyle').categories.map(c => c.name);
+  assert.ok(names.includes('Subscriptions'));
+  const { rows } = L.decorate([
+    { date: '2026-09-06', desc: 'AMAZON PRIME', raw: -14.99 },
+    { date: '2026-09-06', desc: 'GYM MEMBERSHIP', raw: -30 },
+    { date: '2026-09-06', desc: 'AMAZON MARKETPLACE', raw: -20 }
+  ], 'bank', {});
+  assert.equal(rows.find(t => t.desc === 'AMAZON PRIME').c, 'Subscriptions');
+  assert.equal(rows.find(t => t.desc === 'GYM MEMBERSHIP').c, 'Subscriptions');
+  assert.equal(rows.find(t => t.desc === 'AMAZON MARKETPLACE').c, 'Shopping');
+  assert.equal(L.isSpend(rows[0]), true);
+  assert.equal(L.summarize(rows).totalSpend, 64.99);
+});
+
 test('similar payees ignore changing references and stay inside a ten dollar band', () => {
   const vinay = 'Zelle Payment To Vinay Vidyamari Jpm99Cx547X6Zelle Vinay this recharge';
   const vinayOtherCode = 'Zelle Payment To Vinay Vidyamari Qw88Lm22AaZelle Vinay';
