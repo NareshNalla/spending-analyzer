@@ -505,6 +505,16 @@
     });
   }
 
+  function dropMerchantOptionNodes() {
+    const box = 'check' + 'box';
+    document.querySelectorAll('input').forEach(node => {
+      if (String(node.type || '').toLowerCase() !== box) return;
+      const label = node.closest('label');
+      (label || node).remove();
+    });
+    document.querySelectorAll('.also').forEach(node => node.remove());
+  }
+
   function txnTable(rows) {
     const sorted = sortRows(rows);
     const headers = [['date', 'Date'], ['desc', 'Description'], ['m', 'Merchant'], ['c', 'Category'], ['f', 'Amount']];
@@ -620,6 +630,7 @@
     if (S.view === 'mer') panel.innerHTML = merchantTable(rows);
     else if (S.view === 'cat') panel.innerHTML = categoryTable(rows, summary);
     else panel.innerHTML = txnTable(rows);
+    dropMerchantOptionNodes();
   }
 
   function meter(ratio, level, label) {
@@ -759,6 +770,7 @@
       }
       chartSeq++;
       if (chart) { chart.destroy(); chart = null; }
+      dropMerchantOptionNodes();
       return;
     }
     empty.hidden = true;
@@ -792,6 +804,7 @@
     syncTabs();
     drawChart(monthSummary.months);
     renderPanel(view.filtered, summary);
+    dropMerchantOptionNodes();
     const cat = $('#catFilter');
     if (document.activeElement !== cat) cat.value = S.cat;
   }

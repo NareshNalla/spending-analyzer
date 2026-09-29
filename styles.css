@@ -364,16 +364,6 @@ tr:hover td { background: color-mix(in srgb, var(--ac-soft) 65%, transparent); }
 
 .legend b.save { color: var(--save); }
 .cat-cell { flex-wrap: wrap; }
-.also {
-  flex-basis: 100%;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--mut);
-}
-.also input { width: auto; }
 .proj-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .proj-grid .stat { border-style: dashed; }
 .year-block { border-top: 1px solid var(--bd); margin-top: 10px; padding-top: 8px; }
