@@ -729,18 +729,20 @@
     return neg === 0 && pos > 0 ? 'card' : 'bank';
   }
 
+  function magnitude(t) {
+    return Math.abs(Number(t && t.f) || 0);
+  }
+
   function isSpend(t) {
-    return !!(t && t.f < 0 && categoryRole(t.c) === 'spend');
+    return !!(t && categoryRole(t.c) === 'spend');
   }
 
   function isIncome(t) {
-    if (!t || !(t.f > 0)) return false;
-    const role = categoryRole(t.c);
-    return role === 'income' || role === 'spend';
+    return !!(t && categoryRole(t.c) === 'income');
   }
 
   function isSavings(t) {
-    return !!(t && categoryRole(t.c) === 'savings' && t.f < 0);
+    return !!(t && categoryRole(t.c) === 'savings');
   }
 
   function decorate(txns, modePref, rules, similar) {
@@ -776,7 +778,7 @@
   function categoryTotals(rows) {
     const map = {};
     rows.filter(isSpend).forEach(t => {
-      map[t.c] = round2((map[t.c] || 0) + (-t.f));
+      map[t.c] = round2((map[t.c] || 0) + magnitude(t));
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }
@@ -789,9 +791,9 @@
       if (!map.has(month)) map.set(month, { month, income: 0, spend: 0, savings: 0, count: 0 });
       const item = map.get(month);
       item.count += 1;
-      if (isSpend(t)) item.spend = round2(item.spend + (-t.f));
-      else if (isIncome(t)) item.income = round2(item.income + t.f);
-      if (categoryRole(t.c) === 'savings') item.savings = round2(item.savings + (-t.f));
+      if (isSpend(t)) item.spend = round2(item.spend + magnitude(t));
+      else if (isIncome(t)) item.income = round2(item.income + magnitude(t));
+      if (isSavings(t)) item.savings = round2(item.savings + magnitude(t));
     }
     return [...map.values()].map(item => ({
       ...item,
@@ -802,7 +804,7 @@
   function topSpendMerchant(rows) {
     const map = {};
     rows.filter(isSpend).forEach(t => {
-      map[t.m] = round2((map[t.m] || 0) + (-t.f));
+      map[t.m] = round2((map[t.m] || 0) + magnitude(t));
     });
     const top = Object.entries(map).sort((a, b) => b[1] - a[1])[0];
     return top ? { name: top[0], amount: top[1] } : null;
@@ -811,7 +813,7 @@
   function largestPurchase(rows) {
     let best = null;
     rows.filter(isSpend).forEach(t => {
-      if (!best || -t.f > -best.f) best = t;
+      if (!best || magnitude(t) > magnitude(best)) best = t;
     });
     return best;
   }
@@ -830,7 +832,7 @@
     rows.filter(isSpend).forEach(t => {
       const item = map[t.m] || (map[t.m] = { name: t.m, category: t.c, months: new Set(), total: 0 });
       item.months.add(String(t.date).slice(0, 7));
-      item.total = round2(item.total + (-t.f));
+      item.total = round2(item.total + magnitude(t));
       item.category = t.c;
     });
     return Object.values(map)
@@ -849,10 +851,10 @@
     const list = rows || [];
     const spendRows = list.filter(isSpend);
     const incomeRows = list.filter(isIncome);
-    const totalSpend = round2(spendRows.reduce((sum, t) => sum + (-t.f), 0));
-    const totalIncome = round2(incomeRows.reduce((sum, t) => sum + t.f, 0));
+    const totalSpend = round2(spendRows.reduce((sum, t) => sum + magnitude(t), 0));
+    const totalIncome = round2(incomeRows.reduce((sum, t) => sum + magnitude(t), 0));
     const totalSavings = round2(list.reduce((sum, t) => (
-      categoryRole(t.c) === 'savings' ? sum + (-t.f) : sum
+      isSavings(t) ? sum + magnitude(t) : sum
     ), 0));
     const net = round2(totalIncome - totalSpend - totalSavings);
     const cats = categoryTotals(list);
@@ -1062,7 +1064,7 @@
     const month = budgetMonth(rows, range);
     const spent = {};
     (rows || []).filter(t => month && String(t.date).startsWith(month) && isSpend(t)).forEach(t => {
-      spent[t.c] = round2((spent[t.c] || 0) + (-t.f));
+      spent[t.c] = round2((spent[t.c] || 0) + magnitude(t));
     });
     const limits = normalizeBudgets(budgets);
     const statuses = Object.keys(limits).map(name => {

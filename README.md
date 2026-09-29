@@ -70,7 +70,7 @@ Then open `http://127.0.0.1:8765/`.
 
 A file with no header should be `date, description, amount`. A trailing running-balance column is detected when the balances line up. Quoted commas, a UTF-8 BOM, `;` or tab separators, ISO dates (`2026-01-05`), US dates (`01/05/2026`), `($12.50)`, `12.50 CR`, and a trailing minus (`40.00-`) are supported. Dates are read as month/day/year.
 
-Examples live in [`examples/`](examples/). Re-importing an export from this app works: the file is `Date,Description,Merchant,Category,Amount`, and Amount is the signed number shown in the app (negative means money out).
+Examples live in [`examples/`](examples/). Re-importing an export from this app works: the file is `Date,Description,Merchant,Category,Amount`, and Amount stays signed (negative means money out). On screen every amount is positive. Green is an income category and red is spending. Lend, Borrow, and Savings stay out of both.
 
 ### PDF statements
 

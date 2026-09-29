@@ -676,3 +676,45 @@ test('months group by year and projections are labeled from pace', () => {
   assert.notEqual(march.spentSoFar, september.spend);
   assert.equal(march.projectedYearSpend, L.round2(march.spentSoFar * 12));
 });
+
+test('category decides income and spending, not the amount sign', () => {
+  const { rows } = L.decorate([
+    { date: '2026-09-05', desc: 'PAYROLL ACME', raw: -3300 },
+    { date: '2026-09-15', desc: 'RENT PAYMENT', raw: 1450 },
+    { date: '2026-09-16', desc: 'KROGER', raw: 40 },
+    { date: '2026-09-17', desc: 'EMI XYZ', raw: 250 },
+    { date: '2026-09-07', desc: 'TRANSFER TO SAVINGS', raw: 200 },
+    { date: '2026-09-08', desc: 'ZELLE LEND TO VINAY', raw: 80 },
+    { date: '2026-09-09', desc: 'BORROWED FROM MOM', raw: -50 }
+  ], 'bank', {});
+  const payroll = rows.find(t => t.desc.startsWith('PAYROLL'));
+  const rent = rows.find(t => t.c === 'Rent');
+  const groceries = rows.find(t => t.c === 'Groceries');
+  const emi = rows.find(t => t.c === 'EMI');
+  const savings = rows.find(t => t.desc.includes('SAVINGS'));
+  const lend = rows.find(t => t.desc.includes('LEND'));
+  const borrow = rows.find(t => t.desc.includes('BORROW'));
+  assert.equal(L.isIncome(payroll), true);
+  assert.equal(L.isSpend(payroll), false);
+  assert.equal(L.isSpend(rent), true);
+  assert.equal(L.isIncome(rent), false);
+  assert.equal(L.isSpend(groceries), true);
+  assert.equal(L.isSpend(emi), true);
+  assert.equal(L.isIncome(emi), false);
+  assert.equal(L.isSavings(savings), true);
+  assert.equal(L.isSpend(savings), false);
+  assert.equal(L.isIncome(savings), false);
+  assert.equal(L.isSpend(lend), false);
+  assert.equal(L.isIncome(lend), false);
+  assert.equal(L.isSpend(borrow), false);
+  assert.equal(L.isIncome(borrow), false);
+  const summary = L.summarize(rows);
+  assert.equal(summary.totalIncome, 3300);
+  assert.equal(summary.totalSpend, 1740);
+  assert.equal(summary.totalSavings, 200);
+  assert.equal(summary.topCategory.name, 'Rent');
+  assert.equal(summary.topCategory.amount, 1450);
+  assert.equal(summary.months[0].income, 3300);
+  assert.equal(summary.months[0].spend, 1740);
+  assert.equal(summary.months[0].savings, 200);
+});
