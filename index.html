@@ -6,7 +6,7 @@
   <title>Spending Analyzer</title>
   <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233730a3'/%3E%3Cpath d='M8 22h16M8 16h10M8 10h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
   <script>
     try {
       var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
@@ -30,7 +30,7 @@
       <p class="sub">Start with a statement, or load sample transactions to click through the dashboard.</p>
       <ol>
         <li>Use a CSV with a date and an amount, or a text-based bank PDF (not a scan).</li>
-        <li>If income and spending look swapped, change the amount style in the header.</li>
+        <li>If income and spending look swapped, open Settings and change the amount style.</li>
         <li>Set a merchant’s category once. Later visits to that merchant keep it.</li>
       </ol>
       <button type="button" class="primary" id="loadSample">Load sample data</button>
@@ -54,6 +54,7 @@
         <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
         <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
         <button type="button" class="tab section-tab" data-section="projections" role="tab" aria-selected="false">Projections</button>
+        <button type="button" class="tab section-tab" data-section="settings" role="tab" aria-selected="false">Settings</button>
       </div>
       <p class="detail" id="periodHint">Choose a year and month. Totals, categories, transactions, projections, budgets, and savings use only that month.</p>
     </div>
@@ -167,36 +168,37 @@
           <div class="proj-grid" id="projections"></div>
         </section>
       </div>
+
+      <div id="sectionSettings" hidden>
+        <header class="header">
+          <div>
+            <div class="eyebrow">On this device only</div>
+            <h1>Spending Analyzer</h1>
+            <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
+          </div>
+          <div class="actions">
+            <select id="theme" aria-label="Theme">
+              <option value="auto">System theme</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+            <select id="mode" aria-label="How to read amounts">
+              <option value="auto">Auto-detect amounts</option>
+              <option value="bank">Bank: debits negative</option>
+              <option value="card">Card: charges positive</option>
+            </select>
+            <button type="button" class="primary" id="exp">Export CSV</button>
+            <button type="button" id="backup">Backup JSON</button>
+            <button type="button" id="restoreBtn">Restore JSON</button>
+            <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
+            <button type="button" class="danger quiet" id="clr">Clear data</button>
+          </div>
+        </header>
+        <footer class="footer">
+          Transactions, budgets, and goals stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON if you want a copy you can restore later.
+        </footer>
+      </div>
     </section>
-
-    <header class="header">
-      <div>
-        <div class="eyebrow">On this device only</div>
-        <h1>Spending Analyzer</h1>
-        <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
-      </div>
-      <div class="actions">
-        <select id="theme" aria-label="Theme">
-          <option value="auto">System theme</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-        <select id="mode" aria-label="How to read amounts">
-          <option value="auto">Auto-detect amounts</option>
-          <option value="bank">Bank: debits negative</option>
-          <option value="card">Card: charges positive</option>
-        </select>
-        <button type="button" class="primary" id="exp">Export CSV</button>
-        <button type="button" id="backup">Backup JSON</button>
-        <button type="button" id="restoreBtn">Restore JSON</button>
-        <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
-        <button type="button" class="danger quiet" id="clr">Clear data</button>
-      </div>
-    </header>
-
-    <footer class="footer">
-      Transactions, budgets, and goals stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON if you want a copy you can restore later.
-    </footer>
   </div>
 
   <div id="toast" class="toast" hidden role="status">
@@ -205,7 +207,7 @@
   </div>
 
   <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
-  <script src="logic.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="logic.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

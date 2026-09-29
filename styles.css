@@ -103,7 +103,7 @@ h3 { font-size: 0.95rem; letter-spacing: 0; }
   border-color: var(--ac);
 }
 
-.drop, .empty-hero, .stats, .insights, .filters, .split, .tabs, .tools, #recurCard, #addPanel, #panel, #projCard, #monthSection, #sectionBudgets, #sectionGoals, #sectionProjections {
+.drop, .empty-hero, .stats, .insights, .filters, .split, .tabs, .tools, #recurCard, #addPanel, #panel, #projCard, #monthSection, #sectionBudgets, #sectionGoals, #sectionProjections, #sectionSettings {
   margin-top: 14px;
 }
 

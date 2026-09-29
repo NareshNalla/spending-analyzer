@@ -93,7 +93,7 @@
     S.amtMax = (d.amx == null || Number(d.amx) === 999999) ? null : Number(d.amx);
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
-    S.section = ['spend', 'budgets', 'goals', 'projections'].includes(d.sec) ? d.sec : 'spend';
+    S.section = ['spend', 'budgets', 'goals', 'projections', 'settings'].includes(d.sec) ? d.sec : 'spend';
     if (d.v === 'month') S.view = 'tx';
     else if (['tx', 'mer', 'cat'].includes(d.v)) S.view = d.v;
     S.budgets = L.normalizeBudgets(d.b);
@@ -696,10 +696,12 @@
     const budgets = $('#sectionBudgets');
     const goals = $('#sectionGoals');
     const projections = $('#sectionProjections');
+    const settings = $('#sectionSettings');
     if (spend) spend.hidden = S.section !== 'spend';
     if (budgets) budgets.hidden = S.section !== 'budgets';
     if (goals) goals.hidden = S.section !== 'goals';
     if (projections) projections.hidden = S.section !== 'projections';
+    if (settings) settings.hidden = S.section !== 'settings';
   }
 
   function renderPeriodBar() {
@@ -752,14 +754,14 @@
     const dashboard = $('#dashboard');
     if (!S.txns.length) {
       const planned = Object.keys(S.budgets).length || S.goals.length;
-      empty.hidden = !!planned;
-      dashboard.hidden = !planned;
+      const settings = S.section === 'settings';
+      empty.hidden = !!planned || settings;
+      dashboard.hidden = !planned && !settings;
       $('#monthSection').hidden = true;
-      if (!planned) $('#periodBar').hidden = true;
-      if (planned) {
-        renderPeriodBar();
+      renderPeriodBar();
+      syncTabs();
+      if (planned || settings) {
         renderPlan([]);
-        syncTabs();
         $('#stats').innerHTML = '';
         $('#insights').innerHTML = '';
         $('#catBars').innerHTML = '';
@@ -787,7 +789,7 @@
     const periodName = L.formatMonth(S.selectedMonth, true);
     $('#chartTitle').textContent = 'Income and spending in ' + periodName;
     $('#modeHint').textContent = S.mode === 'auto'
-      ? 'Amount style is auto: ' + (view.mode === 'bank' ? 'bank (negative amounts are money out)' : 'card (positive charges are money out)') + '. Change it if income and spending look swapped.'
+      ? 'Amount style is auto: ' + (view.mode === 'bank' ? 'bank (negative amounts are money out)' : 'card (positive charges are money out)') + '. Change it in Settings if income and spending look swapped.'
       : (view.mode === 'bank' ? 'Bank style: negative amounts are money out.' : 'Card style: positive charges are money out.');
     $('#addHint').textContent = 'Saved with the current ' + view.mode + ' amount style, so the sign matches the other rows.';
     renderStats(monthSummary);
