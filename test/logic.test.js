@@ -486,6 +486,32 @@ test('lend and borrow are not spending or income', () => {
   assert.equal(rows.find(t => t.desc.includes('JORDAN')).c, 'Transfers');
 });
 
+test('parking stays under transport and does not take other tolls', () => {
+  assert.equal(L.autoCategory('CITY PARKING'), 'Parking');
+  assert.equal(L.autoCategory('CAR PARKING FEE'), 'Parking');
+  assert.equal(L.autoCategory('DOWNTOWN PARKING GARAGE'), 'Parking');
+  assert.equal(L.autoCategory('NH TOLL PLAZA'), 'Parking');
+  assert.equal(L.autoCategory('TOLLPLAZA 12'), 'Parking');
+  assert.equal(L.autoCategory('PEACH PASS'), 'Transport');
+  assert.equal(L.autoCategory('TOLL'), 'Transport');
+  assert.equal(L.autoCategory('UBER TRIP'), 'Auto / Cab');
+  assert.equal(L.autoCategory('SHELL OIL'), 'Fuel');
+  const parking = L.categories().find(c => c.name === 'Parking');
+  assert.equal(parking.group, 'Transport');
+  assert.equal(parking.role, 'spend');
+  const names = L.categoryGroups().find(group => group.name === 'Transport').categories.map(c => c.name);
+  assert.ok(names.includes('Parking'));
+  assert.ok(names.indexOf('Parking') < names.indexOf('Transport'));
+  const { rows } = L.decorate([
+    { date: '2026-09-06', desc: 'CITY PARKING', raw: -12 },
+    { date: '2026-09-06', desc: 'KROGER', raw: -20 }
+  ], 'bank', {});
+  const summary = L.summarize(rows);
+  assert.equal(rows.find(t => t.desc === 'CITY PARKING').c, 'Parking');
+  assert.equal(L.isSpend(rows.find(t => t.desc === 'CITY PARKING')), true);
+  assert.equal(summary.totalSpend, 32);
+});
+
 test('similar payees ignore changing references and stay inside a ten dollar band', () => {
   const vinay = 'Zelle Payment To Vinay Vidyamari Jpm99Cx547X6Zelle Vinay this recharge';
   const vinayOtherCode = 'Zelle Payment To Vinay Vidyamari Qw88Lm22AaZelle Vinay';
