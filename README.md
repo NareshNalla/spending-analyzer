@@ -26,13 +26,11 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 
 ## Screenshots
 
-![Dashboard with sample income, spending, budgets, and a savings goal](docs/screenshots/dashboard.png)
+![Year and month filters above the spending view](docs/screenshots/period-filter.png)
 
-![Monthly budgets and a savings goal](docs/screenshots/budgets.png)
+![Monthly budgets on their own tab](docs/screenshots/budgets-tab.png)
 
-![Months grouped by year](docs/screenshots/months.png)
-
-![Spending and savings projections](docs/screenshots/projections.png)
+![Savings goals on their own tab](docs/screenshots/goals-tab.png)
 
 ![Dark theme](docs/screenshots/dark.png)
 
