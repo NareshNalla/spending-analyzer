@@ -18,45 +18,6 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="period-bar" id="periodBar" hidden>
-      <label>Year
-        <select id="periodYear" aria-label="Year"></select>
-      </label>
-      <label>Month
-        <select id="periodMonth" aria-label="Month"></select>
-      </label>
-      <div class="main-tabs" role="tablist" aria-label="Sections">
-        <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
-        <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
-        <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
-      </div>
-      <p class="detail" id="periodHint">Choose a year and month. Totals, categories, transactions, projections, budgets, and savings use only that month.</p>
-    </div>
-    <header class="header">
-      <div>
-        <div class="eyebrow">On this device only</div>
-        <h1>Spending Analyzer</h1>
-        <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
-      </div>
-      <div class="actions">
-        <select id="theme" aria-label="Theme">
-          <option value="auto">System theme</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-        <select id="mode" aria-label="How to read amounts">
-          <option value="auto">Auto-detect amounts</option>
-          <option value="bank">Bank: debits negative</option>
-          <option value="card">Card: charges positive</option>
-        </select>
-        <button type="button" class="primary" id="exp">Export CSV</button>
-        <button type="button" id="backup">Backup JSON</button>
-        <button type="button" id="restoreBtn">Restore JSON</button>
-        <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
-        <button type="button" class="danger quiet" id="clr">Clear data</button>
-      </div>
-    </header>
-
     <input id="file" class="file-input" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple tabindex="-1">
     <div class="drop" id="drop" tabindex="0" role="button" aria-describedby="msg">
       <h2>Drop a CSV or PDF here</h2>
@@ -75,13 +36,29 @@
       <button type="button" class="primary" id="loadSample">Load sample data</button>
     </section>
 
+    <section class="card" id="monthSection" aria-label="Months by year" hidden>
+      <h3>Months</h3>
+      <p class="detail" id="monthIntro">The selected year, then its months, newest first. Choose a month to update the figures for that month.</p>
+      <div id="monthTree"></div>
+    </section>
+
+    <div class="period-bar" id="periodBar" hidden>
+      <label>Year
+        <select id="periodYear" aria-label="Year"></select>
+      </label>
+      <label>Month
+        <select id="periodMonth" aria-label="Month"></select>
+      </label>
+      <div class="main-tabs" role="tablist" aria-label="Sections">
+        <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
+        <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
+        <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
+      </div>
+      <p class="detail" id="periodHint">Choose a year and month. Totals, categories, transactions, projections, budgets, and savings use only that month.</p>
+    </div>
+
     <section id="dashboard" hidden>
       <div id="sectionSpend">
-      <section class="card" id="monthSection" aria-label="Months by year">
-        <h3>Months</h3>
-        <p class="detail" id="monthIntro">The selected year, then its months, newest first. Choose a month to update the categories, transactions, and other figures below.</p>
-        <div id="monthTree"></div>
-      </section>
       <p class="meta" id="modeHint"></p>
       <div class="stats" id="stats"></div>
       <div class="insights" id="insights"></div>
@@ -188,6 +165,31 @@
         </section>
       </div>
     </section>
+
+    <header class="header">
+      <div>
+        <div class="eyebrow">On this device only</div>
+        <h1>Spending Analyzer</h1>
+        <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
+      </div>
+      <div class="actions">
+        <select id="theme" aria-label="Theme">
+          <option value="auto">System theme</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+        <select id="mode" aria-label="How to read amounts">
+          <option value="auto">Auto-detect amounts</option>
+          <option value="bank">Bank: debits negative</option>
+          <option value="card">Card: charges positive</option>
+        </select>
+        <button type="button" class="primary" id="exp">Export CSV</button>
+        <button type="button" id="backup">Backup JSON</button>
+        <button type="button" id="restoreBtn">Restore JSON</button>
+        <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
+        <button type="button" class="danger quiet" id="clr">Clear data</button>
+      </div>
+    </header>
 
     <footer class="footer">
       Transactions, budgets, and goals stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON if you want a copy you can restore later.

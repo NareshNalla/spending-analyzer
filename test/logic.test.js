@@ -428,6 +428,13 @@ test('savings and credit-card bills are not spending', () => {
   assert.equal(L.autoCategory('BESCOM ELECTRICITY'), 'Electricity');
   assert.equal(L.autoCategory('RENT PAYMENT'), 'Rent');
   assert.equal(L.autoCategory('AIRTEL MOBILE RECHARGE'), 'Mobile Recharge');
+  assert.equal(L.autoCategory('BIRTHDAY GIFT'), 'Gift');
+  assert.equal(L.autoCategory('SHAGUN FOR NIECE'), 'Gift');
+  assert.equal(L.autoCategory('GIFT SHOP'), 'Gift');
+  assert.equal(L.autoCategory('DIWALI POOJA'), 'Festivals & Pooja');
+  assert.equal(L.autoCategory('AMAZON MARKETPLACE'), 'Shopping');
+  assert.ok(L.categories().some(c => c.name === 'Gifts' && c.group === 'Family & religious'));
+  assert.ok(L.categories().some(c => c.name === 'Gift' && c.group === 'Family & religious'));
   const { rows } = L.decorate([
     { date: '2026-09-05', desc: 'PAYROLL ACME', raw: 1000 },
     { date: '2026-09-06', desc: 'KROGER', raw: -100 },
