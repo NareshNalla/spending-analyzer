@@ -71,6 +71,8 @@
     ['Entertainment', '#c026d3', /\bamc\b|cinema|movie|ticketmaster|steam|\bgames?\b|gamestop|concert|bowling|theater|\bshow\b/i, '★', 'Lifestyle', 'spend'],
     ['Shopping', '#e11d48', /amazon|\bamzn\b|flipkart|myntra|ajio|meesho|\btarget\b|best buy|ebay|etsy|home depot|\blowes?\b|\blowe's\b|ikea|\bnike\b|\bmacy\b|tj maxx|marshalls|\bshops?\b|\bstores?\b|retail/i, '🛍', 'Lifestyle', 'spend', 'Shopping (Amazon/Flipkart/Myntra)'],
     ['Travel', '#4f46e5', /airline|delta air|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|\bflights?\b|motel|\btrips?\b/i, '✈', 'Lifestyle', 'spend'],
+    ['Lend', '#0e7490', /\blends?\b|\blending\b|\blent\b/i, '↗', 'Lend & borrow', 'transfer', 'Lend (money given)'],
+    ['Borrow', '#155e75', /\bborrow(?:s|ed|ing)?\b/i, '↙', 'Lend & borrow', 'transfer', 'Borrow (received back or taken)'],
     ['Credit Card Bill', '#64748b', /credit card bill|credit card payment|card bill|\bcc payment\b/i, '↔', 'Transfers', 'transfer'],
     ['UPI Transfer', '#64748b', /\bupi\b|phonepe|\bgpay\b|google pay/i, '↔', 'Transfers', 'transfer', 'UPI Transfers'],
     ['Transfers', '#64748b', /zelle|venmo|paypal|cash app|\btransfers?\b|\btransferred\b|autopay|payment\W{0,6}thank|online payment|\bwire\b|credit card pmt|\bepay\b/i, '↔', 'Transfers', 'transfer'],
@@ -80,7 +82,7 @@
   const GROUP_ORDER = [
     'Income', 'Housing', 'Utilities', 'Household help', 'Food', 'Transport',
     'Family & religious', 'Education', 'Health & insurance', 'Loans & tax',
-    'Savings & investments', 'Lifestyle', 'Transfers', 'Other'
+    'Savings & investments', 'Lifestyle', 'Lend & borrow', 'Transfers', 'Other'
   ];
 
   const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };

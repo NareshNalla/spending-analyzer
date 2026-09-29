@@ -451,6 +451,41 @@ test('savings and credit-card bills are not spending', () => {
   assert.equal(L.isSpend(rows.find(t => t.desc.startsWith('CREDIT'))), false);
 });
 
+test('lend and borrow are not spending or income', () => {
+  assert.equal(L.autoCategory('ZELLE PAYMENT TO JORDAN'), 'Transfers');
+  assert.equal(L.autoCategory('UPI/RAHUL SHARMA'), 'UPI Transfer');
+  assert.equal(L.autoCategory('ZELLE PAYMENT TO VINAY VIDYAMARI'), 'Transfers');
+  assert.equal(L.autoCategory('ZELLE LEND TO VINAY'), 'Lend');
+  assert.equal(L.autoCategory('LENT 200 TO ANITA'), 'Lend');
+  assert.equal(L.autoCategory('UPI LENDING TO RAHUL'), 'Lend');
+  assert.equal(L.autoCategory('BORROWED FROM MOM'), 'Borrow');
+  assert.equal(L.autoCategory('ZELLE BORROW REPAID BY VINAY'), 'Borrow');
+  assert.equal(L.autoCategory('UPI/RAHUL SHARMA BORROW'), 'Borrow');
+  const lend = L.categories().find(c => c.name === 'Lend');
+  const borrow = L.categories().find(c => c.name === 'Borrow');
+  assert.equal(lend.group, 'Lend & borrow');
+  assert.equal(borrow.group, lend.group);
+  assert.equal(lend.role, 'transfer');
+  assert.equal(borrow.role, 'transfer');
+  const groups = L.categoryGroups().map(group => group.name);
+  assert.ok(groups.indexOf('Lend & borrow') === groups.indexOf('Transfers') - 1);
+  const { rows } = L.decorate([
+    { date: '2026-09-05', desc: 'PAYROLL ACME', raw: 1000 },
+    { date: '2026-09-06', desc: 'KROGER', raw: -100 },
+    { date: '2026-09-07', desc: 'ZELLE LEND TO VINAY', raw: -80 },
+    { date: '2026-09-08', desc: 'ZELLE BORROW REPAID BY VINAY', raw: 80 },
+    { date: '2026-09-09', desc: 'ZELLE PAYMENT TO JORDAN', raw: -40 }
+  ], 'bank', {});
+  const summary = L.summarize(rows);
+  assert.equal(summary.totalIncome, 1000);
+  assert.equal(summary.totalSpend, 100);
+  assert.equal(L.isSpend(rows.find(t => t.desc.includes('LEND'))), false);
+  assert.equal(L.isIncome(rows.find(t => t.desc.includes('BORROW'))), false);
+  assert.equal(rows.find(t => t.desc.includes('LEND')).c, 'Lend');
+  assert.equal(rows.find(t => t.desc.includes('BORROW')).c, 'Borrow');
+  assert.equal(rows.find(t => t.desc.includes('JORDAN')).c, 'Transfers');
+});
+
 test('similar payees ignore changing references and stay inside a ten dollar band', () => {
   const vinay = 'Zelle Payment To Vinay Vidyamari Jpm99Cx547X6Zelle Vinay this recharge';
   const vinayOtherCode = 'Zelle Payment To Vinay Vidyamari Qw88Lm22AaZelle Vinay';
