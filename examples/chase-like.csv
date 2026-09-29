@@ -1,0 +1,4 @@
+Transaction Date,Post Date,Description,Category,Type,Amount,Memo
+01/15/2026,01/16/2026,STARBUCKS STORE 1234,Food & Drink,Sale,-5.75,coffee
+01/16/2026,01/16/2026,PAYROLL ACME CORP,Paycheck,Direct Dep,3200.00,
+01/17/2026,01/18/2026,TARGET STORE,Shopping,Sale,-28.19,home
