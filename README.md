@@ -26,9 +26,9 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 
 ## Screenshots
 
-![Year and month filters above the spending view](docs/screenshots/period-filter.png)
+![Year, month, and section tabs in one bar at the top](docs/screenshots/top-bar.png)
 
-![Monthly budgets on their own tab](docs/screenshots/budgets-tab.png)
+![Months list first under the Spending tab](docs/screenshots/months-first.png)
 
 ![Savings goals on their own tab](docs/screenshots/goals-tab.png)
 
