@@ -17,7 +17,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Savings goals with a target, amount saved, optional deadline, and progress
 - Spending and savings projections, labeled as estimates
 - A Savings category for money moved to savings or investments, kept out of spending
-- Change one transaction’s category without changing the rest, check “Also all {merchant}” to update every row from that merchant, or check “Also similar payments to this person (amount within $10)” so the same person matches across Zelle, UPI, and other payment descriptions when the reference code changes. That choice is saved for later imports in the same amount band
+- Changing a transaction’s category updates every saved row from that same merchant and keeps the choice for later imports. A different merchant is left alone
 - Categories for housing, utilities, household help, food, transport, family, education, health, loans, and savings, including common Indian descriptions. Older names such as Groceries and Housing still work
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
@@ -55,7 +55,7 @@ Then open `http://127.0.0.1:8765/`.
 2. Check the amount style in the header. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
 4. Below the importer, use the months list, then the year and month filters and the Spending, Monthly budgets, and Savings goals menu. Totals, categories, transactions, projections, budgets, and savings use the selected month.
-5. Open **Monthly budgets** or **Savings goals** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Changing a category updates that row only, unless you check “Also all” for that merchant.
+5. Open **Monthly budgets** or **Savings goals** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Changing a category updates the other rows from that same merchant, and later imports of that merchant keep it.
 6. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
 ### CSV files
