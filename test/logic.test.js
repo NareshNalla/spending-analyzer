@@ -575,6 +575,39 @@ test('subscriptions is a selectable category for streaming, cloud, and gym', () 
   assert.equal(L.summarize(rows).totalSpend, 64.99);
 });
 
+test('car lease, car emi, general emi, and car charging are separate', () => {
+  assert.equal(L.autoCategory('CAR LEASE PAYMENT'), 'Car Lease');
+  assert.equal(L.autoCategory('VEHICLE LEASE'), 'Car Lease');
+  assert.equal(L.autoCategory('AUTO LEASE'), 'Car Lease');
+  assert.equal(L.autoCategory('APARTMENT LEASE'), 'Housing');
+  assert.equal(L.autoCategory('CAR EMI'), 'Car EMI');
+  assert.equal(L.autoCategory('CAR EMI PAYMENT'), 'Car EMI');
+  assert.equal(L.autoCategory('VEHICLE EMI'), 'Vehicle EMI');
+  assert.equal(L.autoCategory('HOME EMI'), 'Home Loan EMI');
+  assert.equal(L.autoCategory('PERSONAL LOAN EMI'), 'Personal Loan EMI');
+  assert.equal(L.autoCategory('EMI XYZ'), 'EMI');
+  assert.equal(L.autoCategory('ELECTRIC CAR CHARGE'), 'Car charge');
+  assert.equal(L.autoCategory('CAR CHARGE'), 'Car charge');
+  assert.equal(L.autoCategory('EV CHARGING'), 'Car charge');
+  assert.equal(L.autoCategory('CHARGING STATION'), 'Car charge');
+  assert.equal(L.autoCategory('GEORGIA POWER ELECTRIC'), 'Electricity');
+  const lease = L.categories().find(c => c.name === 'Car Lease');
+  const charge = L.categories().find(c => c.name === 'Car charge');
+  const carEmi = L.categories().find(c => c.name === 'Car EMI');
+  const emi = L.categories().find(c => c.name === 'EMI');
+  assert.equal(lease.group, 'Transport');
+  assert.equal(charge.group, 'Transport');
+  assert.equal(charge.label, 'Electric car charge');
+  assert.equal(carEmi.group, 'Loans & tax');
+  assert.equal(emi.group, 'Loans & tax');
+  for (const cat of [lease, charge, carEmi, emi]) assert.equal(cat.role, 'spend');
+  const transport = L.categoryGroups().find(group => group.name === 'Transport').categories.map(c => c.name);
+  const loans = L.categoryGroups().find(group => group.name === 'Loans & tax').categories.map(c => c.name);
+  assert.ok(transport.includes('Car Lease') && transport.includes('Car charge'));
+  assert.ok(loans.indexOf('Car EMI') < loans.indexOf('Vehicle EMI'));
+  assert.ok(loans.indexOf('Vehicle EMI') < loans.indexOf('EMI'));
+});
+
 test('similar payees ignore changing references and stay inside a ten dollar band', () => {
   const vinay = 'Zelle Payment To Vinay Vidyamari Jpm99Cx547X6Zelle Vinay this recharge';
   const vinayOtherCode = 'Zelle Payment To Vinay Vidyamari Qw88Lm22AaZelle Vinay';
