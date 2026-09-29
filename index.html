@@ -6,7 +6,7 @@
   <title>Spending Analyzer</title>
   <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233730a3'/%3E%3Cpath d='M8 22h16M8 16h10M8 10h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
   <script>
     try {
       var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
@@ -64,18 +64,6 @@
       <p class="meta" id="modeHint"></p>
       <div class="stats" id="stats"></div>
       <div class="insights" id="insights"></div>
-
-      <div class="filters">
-        <div class="filter-grid">
-          <label>From <input type="date" id="dateFrom"></label>
-          <label>To <input type="date" id="dateTo"></label>
-          <label>Min amount <input type="number" id="amtMin" min="0" step="0.01" placeholder="0" title="Uses the absolute amount, so 20 matches both money in and money out"></label>
-          <label>Max amount <input type="number" id="amtMax" min="0" step="0.01" placeholder="No limit" title="Uses the absolute amount. Leave blank for no limit."></label>
-          <label>Category <select id="catFilter"></select></label>
-          <div class="filter-actions"><button type="button" id="resetFilters">Reset filters</button></div>
-        </div>
-        <p id="filterWarn" hidden></p>
-      </div>
 
       <div class="split">
         <section class="card">
@@ -207,7 +195,7 @@
   </div>
 
   <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
-  <script src="logic.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="logic.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
