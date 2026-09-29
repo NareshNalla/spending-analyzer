@@ -3,1077 +3,143 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Spending Analyzer Pro</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-  <style>
-    :root {
-      --bg: #f6f7fb;
-      --card: #ffffff;
-      --tx: #1b1f24;
-      --mut: #6b7280;
-      --bd: #e5e7eb;
-      --ac: #4f46e5;
-      --ac2: #818cf8;
-      --neg: #dc2626;
-      --pos: #16a34a;
-      --warn: #f59e0b;
-      --info: #3b82f6;
-      --shadow: 0 12px 28px rgba(31, 41, 55, 0.08);
-      --grad1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      --grad2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      --grad3: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      --glow: rgba(79, 70, 229, 0.14);
-      box-sizing: border-box;
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --bg: #0f172a;
-        --card: #111827;
-        --tx: #ecf3ff;
-        --mut: #94a3b8;
-        --bd: #243244;
-        --ac: #818cf8;
-        --ac2: #a78bfa;
-        --neg: #f87171;
-        --pos: #4ade80;
-        --shadow: 0 14px 30px rgba(2, 6, 23, 0.45);
-      }
-    }
-
-    :root[data-theme="dark"] {
-      --bg: #0f172a;
-      --card: #111827;
-      --tx: #ecf3ff;
-      --mut: #94a3b8;
-      --bd: #243244;
-      --ac: #818cf8;
-      --ac2: #a78bfa;
-      --neg: #f87171;
-      --pos: #4ade80;
-      --shadow: 0 14px 30px rgba(2, 6, 23, 0.45);
-    }
-
-    * { box-sizing: border-box; }
-    html { scroll-padding-top: env(safe-area-inset-top, 0px); }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--tx);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      transition: background 0.3s ease, color 0.3s ease;
-    }
-    .w { max-width: 1360px; margin: 0 auto; padding: 18px 16px 28px; }
-    .header {
-      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
-      margin-bottom: 20px;
-    }
-    h1 {
-      margin: 0;
-      font-size: clamp(24px, 3vw, 34px);
-      letter-spacing: -0.04em;
-      font-weight: 800;
-      background: var(--grad1);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    .sub { color: var(--mut); font-size: 13px; margin-top: 6px; }
-    .top-actions {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--bd);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: var(--shadow);
-      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .card:hover { transform: translateY(-2px); border-color: var(--ac); }
-    .stat-card {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      box-shadow: 0 18px 36px rgba(102, 126, 234, 0.22);
-    }
-    .stat-card.positive {
-      background: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
-    }
-    .stat-card.negative {
-      background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
-    }
-    .stat-card.info {
-      background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
-    }
-    .stat-card.warning {
-      background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-    }
-    .grid { display: grid; gap: 16px; margin-top: 16px; }
-    .g4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-    .g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-    .g2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-    .k {
-      font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,0.8);
-      font-weight: 700;
-    }
-    .stat-card .k { color: rgba(255,255,255,0.85); }
-    .v {
-      margin-top: 8px; font-size: clamp(22px, 3vw, 28px); font-weight: 700; letter-spacing: -0.04em;
-    }
-    .stat-detail { margin-top: 6px; font-size: 12px; opacity: 0.9; }
-    button, select, input {
-      font: inherit;
-      color: var(--tx);
-      background: var(--card);
-      border: 1px solid var(--bd);
-      border-radius: 10px;
-      padding: 8px 12px;
-      transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease;
-    }
-    button:hover, select:hover, input:hover { border-color: var(--ac); }
-    button { cursor: pointer; font-weight: 600; }
-    button:hover { transform: translateY(-1px); }
-    button.primary {
-      background: var(--ac);
-      color: white;
-      border: none;
-      box-shadow: 0 10px 20px rgba(79, 70, 229, 0.2);
-    }
-    button.primary:hover { background: var(--ac2); }
-    .drop {
-      border: 2px dashed var(--bd);
-      text-align: center;
-      padding: 26px;
-      cursor: pointer;
-      color: var(--mut);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.06);
-      transition: all 0.2s ease;
-    }
-    .drop:hover, .drop.on { border-color: var(--ac); color: var(--ac); background: rgba(79,70,229,0.05); }
-    .msg {
-      font-size: 12px;
-      color: var(--mut);
-      margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(148,163,184,0.08);
-    }
-    .filter-box {
-      display: grid;
-      gap: 12px;
-      padding: 14px;
-      border: 1px solid var(--bd);
-      border-radius: 16px;
-      background: rgba(148,163,184,0.04);
-    }
-    .filter-row {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    }
-    .filter-row label { font-size: 12px; font-weight: 600; color: var(--mut); min-width: 54px; }
-    .filter-row input, .filter-row select { flex: 1; min-width: 120px; }
-    .tabs {
-      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-      margin: 18px 0 10px;
-      border-bottom: 1px solid var(--bd);
-      padding-bottom: 8px;
-    }
-    .tab {
-      border: 1px solid var(--bd);
-      border-bottom-width: 2px;
-      background: transparent; color: var(--tx); border-radius: 10px 10px 0 0; padding: 8px 12px; font-weight: 600; cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .tab.active {
-      background: rgba(79,70,229,0.08); border-color: var(--ac); color: var(--ac);
-    }
-    .tools { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 16px; }
-    .tools input { flex: 1; min-width: 220px; }
-    .tw { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    thead th {
-      background: rgba(148,163,184,0.05);
-      color: var(--mut);
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    th, td {
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--bd);
-      text-align: left;
-      white-space: nowrap;
-    }
-    tr:hover { background: rgba(148,163,184,0.04); }
-    td.d { white-space: normal; max-width: 380px; }
-    .r { text-align: right; }
-    .neg { color: var(--neg); }
-    .pos { color: var(--pos); }
-    .warn { color: var(--warn); }
-    .dot {
-      display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;
-      box-shadow: 0 0 10px currentColor;
-    }
-    .bar {
-      display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 8px 8px; border-radius: 10px;
-      cursor: pointer; transition: background 0.2s ease, transform 0.2s ease;
-    }
-    .bar:hover { background: rgba(148,163,184,0.04); transform: translateX(3px); }
-    .bar .label { width: 150px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bar .track { flex: 1; height: 14px; background: rgba(148,163,184,0.12); border-radius: 999px; overflow: hidden; }
-    .bar .fill { height: 100%; border-radius: 999px; }
-    .bar .amt { width: 76px; text-align: right; font-weight: 700; }
-    .mini-bars { display: flex; align-items: flex-end; gap: 10px; height: 160px; overflow-x: auto; padding: 10px 0 0; }
-    .mini-bars > div { flex: 1; min-width: 40px; text-align: center; font-size: 10px; color: var(--mut); }
-    .mini-bars i {
-      display: block; background: linear-gradient(180deg, var(--ac2), var(--ac));
-      border-radius: 8px 8px 0 0; min-height: 6px; margin-bottom: 6px; box-shadow: 0 8px 16px rgba(79,70,229,0.18);
-    }
-    .insight {
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(168,85,247,0.1));
-      border: 1px solid var(--bd);
-      border-radius: 14px;
-      padding: 16px;
-    }
-    .insight .label {
-      color: var(--mut); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700;
-    }
-    .insight .value {
-      margin-top: 8px; font-size: clamp(22px, 2.4vw, 28px); font-weight: 800; letter-spacing: -0.04em;
-    }
-    .insight .detail { margin-top: 8px; font-size: 12px; color: var(--mut); }
-    .badge {
-      display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
-      background: rgba(79,70,229,0.08); color: var(--ac); border: 1px solid rgba(79,70,229,0.16);
-    }
-    .pill {
-      display: inline-block; border: 1px solid var(--bd); background: rgba(148,163,184,0.03); border-radius: 999px;
-      padding: 4px 9px; font-size: 11px; color: var(--mut); font-weight: 600;
-    }
-    .empty {
-      padding: 28px; text-align: center; color: var(--mut);
-    }
-    .chart-wrap {
-      position: relative; height: 260px;
-    }
-    .month-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-top: 16px;
-    }
-    .month-card {
-      width: 100%;
-      background: rgba(148,163,184,0.03);
-      border: 1px solid var(--bd);
-      border-radius: 14px;
-      padding: 14px;
-      cursor: pointer;
-      transition: all 0.25s ease;
-    }
-    .month-card:hover, .month-card.active {
-      border-color: var(--ac); background: rgba(79,70,229,0.06);
-      transform: translateY(-2px);
-    }
-    .month-head {
-      display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-bottom: 10px;
-      font-weight: 700;
-    }
-    .month-body {
-      display: flex; flex-direction: column; gap: 4px; color: var(--mut); font-size: 12px;
-    }
-    .month-body strong {
-      color: var(--tx); font-size: 18px; margin-top: 6px;
-    }
-    @media (max-width: 768px) {
-      .g2, .g3, .g4 { grid-template-columns: 1fr; }
-      .header { align-items: flex-start; }
-      .filter-row { align-items: stretch; }
-      .filter-row label, .filter-row input, .filter-row select { width: 100%; }
-      .top-actions { width: 100%; justify-content: flex-start; }
-    }
-  </style>
+  <title>Spending Analyzer</title>
+  <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
+      var pref = saved && saved.th || 'auto';
+      var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    } catch (e) {}
+  </script>
 </head>
 <body>
-  <div class="w">
-    <div class="header">
+  <div class="wrap">
+    <header class="header">
       <div>
-        <h1>💸 Spending Analyzer Pro</h1>
-        <div class="sub">Private financial insights • Browser-only storage • Future-ready analytics</div>
+        <div class="eyebrow">On this device only</div>
+        <h1>Spending Analyzer</h1>
+        <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
       </div>
-      <div class="top-actions">
-        <select id="theme" title="Theme selector">
-          <option value="auto">Theme: system</option>
-          <option value="light">Theme: light</option>
-          <option value="dark">Theme: dark</option>
+      <div class="actions">
+        <select id="theme" aria-label="Theme">
+          <option value="auto">System theme</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
         </select>
-        <select id="mode" title="How to read amounts">
-          <option value="auto">Amounts: auto</option>
-          <option value="bank">Debits negative (bank)</option>
-          <option value="card">Credits negative (card)</option>
+        <select id="mode" aria-label="How to read amounts">
+          <option value="auto">Auto-detect amounts</option>
+          <option value="bank">Bank: debits negative</option>
+          <option value="card">Card: charges positive</option>
         </select>
-        <button class="primary" id="exp">📥 Export CSV</button>
-        <button id="clr">🗑️ Clear</button>
+        <button type="button" class="primary" id="exp">Export CSV</button>
+        <button type="button" class="danger quiet" id="clr">Clear data</button>
       </div>
+    </header>
+
+    <input id="file" class="file-input" type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple tabindex="-1">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-describedby="msg">
+      <h2>Drop a CSV or PDF here</h2>
+      <p>Or press Enter to choose files. CSV works offline. PDF text is read with the local PDF.js copy.</p>
+      <div class="msg" id="msg" role="status">No files uploaded yet.</div>
     </div>
 
-    <div class="card drop" id="drop">
-      <div style="font-size:18px; margin-bottom:8px; font-weight:700;">📄 Drop statement PDFs or CSV files here</div>
-      <div>CSV: date, description, amount  •  PDF: bank statements supported in-browser</div>
-      <input id="file" type="file" accept=".pdf,.csv" multiple hidden>
-      <div class="msg" id="msg">No files uploaded yet.</div>
-    </div>
+    <section id="empty" class="empty-hero" hidden>
+      <h2>See where your money goes</h2>
+      <p class="sub">Start with a statement, or load sample transactions to click through the dashboard.</p>
+      <ol>
+        <li>Use a CSV with a date and an amount, or a text-based bank PDF (not a scan).</li>
+        <li>If income and spending look swapped, change the amount style in the header.</li>
+        <li>Set a merchant’s category once. Later visits to that merchant keep it.</li>
+      </ol>
+      <button type="button" class="primary" id="loadSample">Load sample data</button>
+    </section>
 
-    <div id="app"></div>
+    <section id="dashboard" hidden>
+      <p class="meta" id="modeHint"></p>
+      <div class="stats" id="stats"></div>
+      <div class="insights" id="insights"></div>
+
+      <div class="filters">
+        <div class="filter-grid">
+          <label>From <input type="date" id="dateFrom"></label>
+          <label>To <input type="date" id="dateTo"></label>
+          <label>Min amount <input type="number" id="amtMin" min="0" step="0.01" placeholder="0" title="Uses the absolute amount, so 20 matches both money in and money out"></label>
+          <label>Max amount <input type="number" id="amtMax" min="0" step="0.01" placeholder="No limit" title="Uses the absolute amount. Leave blank for no limit."></label>
+          <label>Category <select id="catFilter"></select></label>
+          <div class="filter-actions"><button type="button" id="resetFilters">Reset filters</button></div>
+        </div>
+        <p id="filterWarn" hidden></p>
+      </div>
+
+      <div class="split">
+        <section class="card">
+          <h3>Income and spending by month</h3>
+          <div class="chart-box"><canvas id="monthChart" aria-label="Monthly income and spending" role="img"></canvas></div>
+          <div class="chart-fallback" id="chartFallback" hidden></div>
+          <div class="legend"><span><b class="pos">Income</b> excluding transfers</span><span><b class="neg">Spending</b> excluding transfers</span></div>
+        </section>
+        <section class="card">
+          <h3>Spending by category</h3>
+          <p class="detail">Click a category to filter the list.</p>
+          <div class="cat-list" id="catBars"></div>
+        </section>
+      </div>
+
+      <section class="card" id="recurCard">
+        <h3>Repeating spend</h3>
+        <p class="detail">Merchants with purchases in two or more months of this view.</p>
+        <ul class="recur" id="recur"></ul>
+      </section>
+
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button type="button" class="tab active" data-view="tx" role="tab" aria-selected="true">Transactions</button>
+        <button type="button" class="tab" data-view="mer" role="tab" aria-selected="false">Merchants</button>
+        <button type="button" class="tab" data-view="cat" role="tab" aria-selected="false">Categories</button>
+        <button type="button" class="tab" data-view="month" role="tab" aria-selected="false">Months</button>
+      </div>
+
+      <div class="tools">
+        <input id="q" type="search" placeholder="Search description, merchant, or category" aria-label="Search transactions">
+        <button type="button" id="loadSampleMore">Add sample data</button>
+      </div>
+      <p class="meta" id="resultMeta"></p>
+
+      <details class="card" id="addPanel">
+        <summary>Add a transaction</summary>
+        <form class="add-form" id="addForm">
+          <label>Date <input type="date" name="date" required></label>
+          <label>Description <input name="desc" required maxlength="200" placeholder="Kroger, rent, payroll" autocomplete="off"></label>
+          <label>Amount <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+          <label>Kind
+            <select name="kind">
+              <option value="spend">Spending</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+          <button type="submit" class="primary">Add</button>
+          <p class="error" id="addError" role="status"></p>
+        </form>
+        <p class="detail" id="addHint"></p>
+      </details>
+
+      <div class="card" id="panel"></div>
+    </section>
+
+    <footer class="footer">
+      Transactions stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload.
+    </footer>
   </div>
 
-  <script>
-    const $ = s => document.querySelector(s);
-    const $$ = s => [...document.querySelectorAll(s)];
-    const esc = s => String(s).replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-
-    const CATS = [
-      ['Income', '#16a34a', /payroll|direct dep|salary|paycheck|bonus|dividend|refund|reversal|interest paid/i, '💰'],
-      ['Transfers', '#94a3b8', /zelle|venmo|paypal|cash app|transfer|autopay|payment.*thank|online payment|wire|credit card pmt|epay/i, '🔄'],
-      ['Fees', '#ef4444', /fee|interest charge|overdraft|finance charge|penalty/i, '⚠️'],
-      ['Dining', '#f97316', /restaurant|cafe|coffee|starbucks|mcdonald|chipotle|pizza|doordash|uber eats|ubereats|grubhub|dunkin|subway|taco|grill|diner|bbq|burger|bakery|biryani|wingstop|chick-fil/i, '🍔'],
-      ['Groceries', '#22c55e', /kroger|publix|walmart|aldi|whole foods|trader joe|costco|safeway|grocery|patel|h mart|sprouts|instacart|market/i, '🛒'],
-      ['Transport', '#0ea5e9', /shell|chevron|exxon|\bbp\b|gas\b|fuel|uber|lyft|marta|parking|toll|racetrac|quiktrip|\bqt\b|citgo|mobil|peach pass|transit/i, '🚗'],
-      ['Subscriptions', '#a855f7', /netflix|spotify|hulu|disney|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|subscription|patreon|icloud/i, '🎬'],
-      ['Utilities', '#eab308', /electric|georgia power|water|internet|comcast|xfinity|at&t|verizon|t-mobile|utility|insurance|geico|state farm|allstate|spectrum|gas co|atmos|phone|cable/i, '⚡'],
-      ['Health', '#ec4899', /cvs|walgreens|pharmacy|clinic|hospital|dental|medical|health|doctor|vision|optum|aetna|labcorp|quest diag/i, '💊'],
-      ['Housing', '#14b8a6', /rent|mortgage|hoa|lease|apartment|property|homeowner/i, '🏠'],
-      ['Travel', '#6366f1', /airline|delta|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|flight|motel|trip/i, '✈️'],
-      ['Entertainment', '#d946ef', /amc|cinema|movie|ticketmaster|steam|game|concert|bowling|theater|show/i, '🎮'],
-      ['Shopping', '#f43f5e', /amazon|amzn|target|best buy|ebay|etsy|home depot|lowe|ikea|nike|macy|tj maxx|marshalls|shop|store|retail/i, '🛍️'],
-      ['Education', '#84cc16', /tuition|school|university|udemy|coursera|book|class|course|training|seminar/i, '📚'],
-      ['Other', '#64748b', /^$/, '📌']
-    ];
-
-    const COL = Object.fromEntries(CATS.map(c => [c[0], c[1]]));
-    const EMOJI = Object.fromEntries(CATS.map(c => [c[0], c[3]]));
-    const MON = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
-
-    const S = {
-      txns: [],
-      rules: {},
-      mode: 'auto',
-      q: '',
-      cat: '',
-      view: 'tx',
-      sk: 'date',
-      sd: -1,
-      dateFrom: '',
-      dateTo: '',
-      amtMin: 0,
-      amtMax: 999999,
-      theme: 'auto',
-      selectedMonth: ''
-    };
-
-    const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
-    const fmtShort = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
-
-    function save() {
-      try {
-        localStorage.setItem('spend_v3', JSON.stringify({
-          t: S.txns,
-          r: S.rules,
-          m: S.mode,
-          f: S.dateFrom,
-          to: S.dateTo,
-          amn: S.amtMin,
-          amx: S.amtMax,
-          th: S.theme,
-          sm: S.selectedMonth
-        }));
-      } catch (e) {}
-    }
-
-    function load() {
-      try {
-        const d = JSON.parse(localStorage.getItem('spend_v3') || 'null');
-        if (d) {
-          S.txns = d.t || [];
-          S.rules = d.r || {};
-          S.mode = d.m || 'auto';
-          S.dateFrom = d.f || '';
-          S.dateTo = d.to || '';
-          S.amtMin = d.amn ?? 0;
-          S.amtMax = d.amx ?? 999999;
-          S.theme = d.th || 'auto';
-          S.selectedMonth = d.sm || '';
-        }
-      } catch (e) {}
-    }
-
-    function setTheme(theme) {
-      const T = theme || 'auto';
-      const root = document.documentElement;
-      if (T === 'auto') {
-        root.removeAttribute('data-theme');
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        root.dataset.theme = isDark ? 'dark' : 'light';
-      } else {
-        root.dataset.theme = T;
-      }
-      S.theme = T;
-      $('#theme').value = T;
-    }
-
-    function merchant(d) {
-      let s = d.toUpperCase().replace(/\b(POS|DEBIT|CREDIT|CARD|PURCHASE|CHECKCARD|CHECK|VISA|ACH|WITHDRAWAL|RECURRING|PMT|PAYMENT|ONLINE|TST|SQ|PP)\b/g, ' ')
-        .replace(/[#*\d\/\\:.,_-]+/g, ' ');
-      s = s.split(' ').slice(0, 2).join(' ') || d.slice(0, 20);
-      return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    }
-
-    function auto(d) {
-      for (const c of CATS) {
-        if (c[2].test(d)) return c[0];
-      }
-      return 'Other';
-    }
-    const catOf = t => S.rules[t.m] || auto(t.desc);
-
-    function mode() {
-      if (S.mode !== 'auto') return S.mode;
-      return S.txns.some(t => t.raw < 0) ? 'bank' : 'card';
-    }
-
-    const flow = t => mode() === 'bank' ? t.raw : -t.raw;
-
-    function ok(y, mo, d) {
-      return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null;
-    }
-
-    function iso(s, yr) {
-      s = s.trim();
-      let m;
-      if (m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/)) {
-        let y = m[3] ? +m[3] : yr;
-        if (y < 100) y += 2000;
-        return ok(y, +m[1], +m[2]);
-      }
-      if (m = s.match(/^([A-Za-z]{3})[a-z]*\.? (\d{1,2})(?:,? (\d{4}))?$/)) {
-        return ok(m[3] ? +m[3] : yr, MON[m[1].toLowerCase()], +m[2]);
-      }
-      if (m = s.match(/^(\d{1,2})[- ]([A-Za-z]{3})[a-z]*(?:[- ,]+(\d{2,4}))?$/)) {
-        let y = m[3] ? +m[3] : yr;
-        if (y < 100) y += 2000;
-        return ok(y, MON[m[2].toLowerCase()], +m[1]);
-      }
-      return null;
-    }
-
-    const DATE = /^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?|[A-Za-z]{3}[a-z]*\.? \d{1,2}(?:,? \d{4})?|\d{1,2}[- ][A-Za-z]{3}(?:[- ,]+\d{2,4})?)\s+(.*)$/;
-    const AMT = /(?<![\w.])\(?[-+]?\$?\s?\d{1,3}(?:,\d{3})*\.\d{2}\)?(?:\s?(?:CR|DB|DR))?(?![\w])/gi;
-    const SKIP = /(beginning|ending|opening|closing|previous|new|available) balance|total|summary|credit limit|minimum payment/i;
-
-    function amt(tok) {
-      const neg = /[-(]/.test(tok) || /DR|DB/i.test(tok);
-      const v = parseFloat(tok.replace(/[^\d.]/g, ''));
-      return neg ? -v : v;
-    }
-
-    function parseLines(lines, yr) {
-      const out = [];
-      for (const ln of lines) {
-        if (SKIP.test(ln)) continue;
-        const m = ln.match(DATE);
-        if (!m) continue;
-        let rest = m[2];
-        const mm = rest.match(/^(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\s+(.*)$/);
-        if (mm) rest = mm[2];
-        const am = rest.match(AMT);
-        if (!am) continue;
-        const pick = am.length <= 2 ? am[0] : am[am.length - 2];
-        const date = iso(m[1], yr);
-        if (!date) continue;
-        let desc = rest.replace(AMT, ' ').replace(/\s+/g, ' ').trim();
-        if (desc.length < 2) continue;
-        out.push({ date, desc, raw: amt(pick) });
-      }
-      return out;
-    }
-
-    async function readPdf(f) {
-      const buf = await f.arrayBuffer();
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-      const lines = [];
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const tc = await (await pdf.getPage(p)).getTextContent();
-        const rows = [];
-        for (const it of tc.items) {
-          if (!it.str.trim()) continue;
-          const y = it.transform[5];
-          let r = rows.find(r => Math.abs(r.y - y) < 3);
-          if (!r) { r = { y, it: [] }; rows.push(r); }
-          r.it.push({ x: it.transform[4], s: it.str });
-        }
-        rows.sort((a, b) => b.y - a.y).forEach(r => {
-          lines.push(r.it.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim());
-        });
-      }
-      const ym = lines.join(' ').match(/\b(20\d{2})\b/);
-      return parseLines(lines, ym ? +ym[1] : new Date().getFullYear());
-    }
-
-    function readCsv(text) {
-      return text.split(/\r?\n/).filter(Boolean).map(line => {
-        const c = line.split(',').map(x => x.replace(/^"|"$/g, '').trim());
-        const d = iso(c[0], new Date().getFullYear());
-        const a = parseFloat((c[c.length - 1] || '').replace(/[^\d.-]/g, ''));
-        if (d && !isNaN(a)) {
-          return { date: d, desc: c.slice(1, -1).join(' ') || 'Unknown', raw: a };
-        }
-        return null;
-      }).filter(Boolean);
-    }
-
-    async function ingest(files) {
-      const msg = $('#msg');
-      let added = 0;
-      for (const f of files) {
-        msg.textContent = '📖 Reading ' + f.name + '…';
-        try {
-          const rows = /\.csv$/i.test(f.name) ? readCsv(await f.text()) : await readPdf(f);
-          if (!rows.length) {
-            msg.textContent = `⚠️ No transactions found in ${f.name}. Try CSV or a cleaner statement export.`;
-            continue;
-          }
-          const seen = new Set(S.txns.map(t => t.date + t.desc + t.raw));
-          for (const r of rows) {
-            const k = r.date + r.desc + r.raw;
-            if (seen.has(k)) continue;
-            seen.add(k);
-            S.txns.push({ ...r, m: merchant(r.desc), file: f.name });
-            added++;
-          }
-        } catch (e) {
-          msg.textContent = '❌ Could not read ' + f.name + ': ' + e.message;
-          return;
-        }
-      }
-      msg.textContent = `✅ Added ${added} transaction${added === 1 ? '' : 's'} successfully.`;
-      save();
-      render();
-    }
-
-    function buildMonthSummaries(source = S.txns) {
-      const map = {};
-      source.forEach(t => {
-        const signed = flow({ ...t, raw: t.raw });
-        const month = t.date.slice(0, 7);
-        if (!map[month]) {
-          map[month] = { month, income: 0, spend: 0, net: 0, count: 0 };
-        }
-        map[month].count += 1;
-        if (signed > 0) {
-          map[month].income += signed;
-        } else {
-          map[month].spend += Math.abs(signed);
-        }
-        map[month].net += signed;
-      });
-
-      return Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
-    }
-
-    function view() {
-      const q = S.q.toLowerCase();
-      return S.txns.map(t => ({ ...t, c: catOf(t), f: flow(t) })).filter(t => {
-        const dateOk = (!S.dateFrom || t.date >= S.dateFrom) && (!S.dateTo || t.date <= S.dateTo);
-        const amtOk = Math.abs(t.f) >= S.amtMin && Math.abs(t.f) <= S.amtMax;
-        const catOk = !S.cat || t.c === S.cat;
-        const qOk = !q || (t.desc + ' ' + t.m + ' ' + t.c).toLowerCase().includes(q);
-        return dateOk && amtOk && catOk && qOk;
-      });
-    }
-
-    const isSpend = t => t.f < 0 && t.c !== 'Transfers';
-    const isInc = t => t.f > 0 && t.c !== 'Transfers';
-
-    function renderTable(filtered, spendRows, catStats) {
-      const tc = $('#table-container');
-      if (!filtered.length) {
-        tc.innerHTML = '<div class="empty">No matching transactions for the current filters.</div>';
-        return;
-      }
-
-      let body = '';
-      if (S.view === 'tx') {
-        const k = S.sk;
-        const d = S.sd;
-        filtered = [...filtered].sort((a, b) => {
-          const x = k === 'f' ? a.f : a[k];
-          const y = k === 'f' ? b.f : b[k];
-          return (x > y ? 1 : x < y ? -1 : 0) * d;
-        });
-
-        body = `<table><thead><tr>${[['date','📅 Date'],['desc','📝 Desc'],['m','🏪 Merchant'],['c','📂 Category'],['f','💰 Amount']]
-          .map(([key,label]) => `<th data-s="${key}" class="${key === 'f' ? 'r' : ''}">${label}${S.sk === key ? (S.sd > 0 ? ' ▲' : ' ▼') : ' ⇅'}</th>`).join('')}</tr></thead><tbody>${filtered.map(t => `
-          <tr>
-            <td>${t.date}</td>
-            <td class="d">${esc(t.desc)}</td>
-            <td>${esc(t.m)}</td>
-            <td><span class="dot" style="background:${COL[t.c]}; color:${COL[t.c]};"></span><select data-m="${esc(t.m)}">${CATS.map(c => `<option value="${c[0]}" ${catOf({ m: t.m, desc: t.desc }) === c[0] ? 'selected' : ''}>${c[3]} ${c[0]}</option>`).join('')}</select></td>
-            <td class="r ${t.f < 0 ? 'neg' : 'pos'}">${fmt(t.f)}</td>
-          </tr>`).join('')}</tbody></table>`;
-      } else if (S.view === 'mer') {
-        const g = {};
-        filtered.forEach(t => {
-          const o = g[t.m] || (g[t.m] = { m: t.m, n: 0, s: 0, c: t.c });
-          o.n += 1;
-          o.s += t.f;
-        });
-        body = `<table><thead><tr><th>🏪 Merchant</th><th>📂 Category</th><th class="r">Count</th><th class="r">Net</th></tr></thead><tbody>${Object.values(g).sort((a, b) => a.s - b.s).map(o => `
-          <tr>
-            <td>${esc(o.m)}</td>
-            <td><span class="dot" style="background:${COL[o.c]}; color:${COL[o.c]};"></span>${o.c}</td>
-            <td class="r">${o.n}</td>
-            <td class="r ${o.s < 0 ? 'neg' : 'pos'}">${fmt(o.s)}</td>
-          </tr>`).join('')}</tbody></table>`;
-      } else if (S.view === 'cat') {
-        const g = {};
-        spendRows.forEach(t => {
-          const o = g[t.c] || (g[t.c] = { c: t.c, n: 0, s: 0 });
-          o.n += 1;
-          o.s += -t.f;
-        });
-        const totalSpend = spendRows.reduce((sum, t) => sum - t.f, 0);
-        body = `<table><thead><tr><th>📂 Category</th><th class="r">Count</th><th class="r">Total</th><th class="r">Share</th></tr></thead><tbody>${Object.values(g).sort((a, b) => b.s - a.s).map(o => `
-          <tr>
-            <td><span class="dot" style="background:${COL[o.c]}; color:${COL[o.c]};"></span>${EMOJI[o.c]} ${o.c}</td>
-            <td class="r">${o.n}</td>
-            <td class="r">${fmt(o.s)}</td>
-            <td class="r">${((o.s / totalSpend) * 100 || 0).toFixed(1)}%</td>
-          </tr>`).join('')}</tbody></table>`;
-      }
-
-      tc.innerHTML = body;
-
-      $$('th[data-s]').forEach(h => {
-        h.onclick = () => {
-          const key = h.dataset.s;
-          S.sd = S.sk === key ? -S.sd : 1;
-          S.sk = key;
-          render();
-        };
-      });
-
-      $$('select[data-m]').forEach(s => {
-        s.onchange = () => {
-          S.rules[s.dataset.m] = s.value;
-          save();
-          render();
-        };
-      });
-    }
-
-    function renderCharts(filtered) {
-      const spendRows = filtered.filter(isSpend);
-      const incomeRows = filtered.filter(isInc);
-
-      const monthMap = {};
-      spendRows.forEach(t => {
-        const key = t.date.slice(0, 7);
-        monthMap[key] = (monthMap[key] || 0) - t.f;
-      });
-      const months = Object.entries(monthMap).sort();
-      const monthlyLabels = months.map(([k]) => k.slice(5));
-      const monthlySpend = months.map(([, v]) => v);
-
-      const catMap = {};
-      spendRows.forEach(t => {
-        catMap[t.c] = (catMap[t.c] || 0) - t.f;
-      });
-      const catEntries = Object.entries(catMap).sort((a, b) => b[1] - a[1]);
-
-      const chartWrap = $('#chart-wrap');
-      if (chartWrap) {
-        chartWrap.innerHTML = `
-          <div class="chart-wrap"><canvas id="spendChart"></canvas></div>
-          <div class="chart-wrap" style="margin-top: 10px; height: 240px"><canvas id="categoryChart"></canvas></div>
-        `;
-      }
-
-      if (window.mySpendChart) window.mySpendChart.destroy();
-      if (window.myCategoryChart) window.myCategoryChart.destroy();
-
-      const spendCtx = document.getElementById('spendChart');
-      if (spendCtx) {
-        window.mySpendChart = new Chart(spendCtx, {
-          type: 'bar',
-          data: {
-            labels: monthlyLabels,
-            datasets: [{
-              label: 'Spend',
-              data: monthlySpend,
-              borderRadius: 8,
-              backgroundColor: monthlySpend.map((_, i) => i % 2 === 0 ? '#4f46e5' : '#818cf8'),
-              borderColor: '#4f46e5',
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-              y: {
-                beginAtZero: false,
-                ticks: {
-                  callback: value => '$' + new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
-                }
-              }
-            }
-          }
-        });
-      }
-
-      const catCtx = document.getElementById('categoryChart');
-      if (catCtx) {
-        window.myCategoryChart = new Chart(catCtx, {
-          type: 'doughnut',
-          data: {
-            labels: catEntries.map(([label]) => label),
-            datasets: [{
-              data: catEntries.map(([, value]) => value),
-              backgroundColor: catEntries.map(([label]) => COL[label]),
-              borderWidth: 0
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            cutout: '60%',
-            plugins: {
-              legend: { position: 'bottom' }
-            }
-          }
-        });
-      }
-
-      return { spendRows, incomeRows, catEntries, months };
-    }
-
-    function renderMonthOverview() {
-      const months = buildMonthSummaries();
-      if (!months.length) {
-        $('#table-container').innerHTML = '<div class="empty">No monthly data yet. Upload statements to see months.</div>';
-        return;
-      }
-
-      if (!S.selectedMonth || !months.some(m => m.month === S.selectedMonth)) {
-        S.selectedMonth = months[months.length - 1].month;
-      }
-
-      const selected = months.find(m => m.month === S.selectedMonth) || months[months.length - 1];
-      const selectedRows = S.txns.filter(t => t.date.startsWith(selected.month));
-      const selectedSpend = selectedRows.filter(t => flow({ ...t, raw: t.raw }) < 0);
-      const selectedIncome = selectedRows.filter(t => flow({ ...t, raw: t.raw }) > 0);
-      const totalSelectedSpend = selectedSpend.reduce((sum, t) => sum - flow({ ...t, raw: t.raw }), 0);
-      const totalSelectedIncome = selectedIncome.reduce((sum, t) => sum + flow({ ...t, raw: t.raw }), 0);
-      const categoryTotals = {};
-      selectedSpend.forEach(t => {
-        const category = catOf({ m: t.m, desc: t.desc });
-        categoryTotals[category] = (categoryTotals[category] || 0) + Math.abs(flow({ ...t, raw: t.raw }));
-      });
-      const categoryEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
-
-      const cards = months.map(item => {
-        const active = item.month === selected.month ? 'active' : '';
-        return `
-          <div class="month-card ${active}" data-month="${item.month}">
-            <div class="month-head"><span>${new Date(item.month + '-01').toLocaleString('en-US', { month: 'short', year: 'numeric' })}</span><span>${item.count} txns</span></div>
-            <div class="month-body">
-              <span>Income: <b class="pos">${fmt(item.income)}</b></span>
-              <span>Spend: <b class="neg">${fmt(item.spend)}</b></span>
-              <strong>${fmt(item.net)}</strong>
-            </div>
-          </div>
-        `;
-      }).join('');
-
-      const detailRows = categoryEntries.map(([cat, value]) => `
-        <tr>
-          <td><span class="dot" style="background:${COL[cat]}; color:${COL[cat]};"></span>${EMOJI[cat]} ${cat}</td>
-          <td class="r">${fmt(value)}</td>
-          <td class="r">${((value / Math.max(totalSelectedSpend, 1)) * 100).toFixed(1)}%</td>
-        </tr>
-      `).join('');
-
-      $('#table-container').innerHTML = `
-        <div class="card" style="margin-top: 8px; border:none; box-shadow:none; padding:0;">
-          <div class="month-grid">${cards}</div>
-          <div class="grid g3" style="margin-top:16px;">
-            <div class="insight">
-              <div class="label">Month</div>
-              <div class="value">${new Date(selected.month + '-01').toLocaleString('en-US', { month: 'long', year: 'numeric' })}</div>
-              <div class="detail">${selected.count} transactions</div>
-            </div>
-            <div class="insight">
-              <div class="label">Income</div>
-              <div class="value pos">${fmt(totalSelectedIncome)}</div>
-              <div class="detail">Incoming for this month</div>
-            </div>
-            <div class="insight">
-              <div class="label">Spend</div>
-              <div class="value neg">${fmt(totalSelectedSpend)}</div>
-              <div class="detail">Net ${fmt(totalSelectedIncome - totalSelectedSpend)}</div>
-            </div>
-          </div>
-          <div class="card" style="margin-top:18px;">
-            <div class="k" style="color: var(--mut); margin-bottom: 8px;">${new Date(selected.month + '-01').toLocaleString('en-US', { month: 'long', year: 'numeric' })} by category</div>
-            <table>
-              <thead><tr><th>Category</th><th class="r">Amount</th><th class="r">Share</th></tr></thead>
-              <tbody>${detailRows || '<tr><td colspan="3" class="empty">No category details for this month.</td></tr>'}</tbody>
-            </table>
-          </div>
-        </div>
-      `;
-
-      $$('.month-card[data-month]').forEach(card => {
-        card.onclick = () => {
-          S.selectedMonth = card.dataset.month;
-          save();
-          render();
-        };
-      });
-    }
-
-    function render() {
-      const A = $('#app');
-      if (!S.txns.length) {
-        A.innerHTML = `<div class="empty" style="margin-top:24px;">📤 Upload a bank statement to start analyzing spending, earnings, and monthly trends.</div>`;
-        return;
-      }
-
-      const all = S.txns.map(t => ({ ...t, c: catOf(t), f: flow(t) }));
-      const filtered = view();
-      const spendRows = filtered.filter(isSpend);
-      const incomeRows = filtered.filter(isInc);
-      const totalSpend = spendRows.reduce((sum, t) => sum - t.f, 0);
-      const totalIncome = incomeRows.reduce((sum, t) => sum + t.f, 0);
-      const netCash = totalIncome - totalSpend;
-      const avgSpend = spendRows.length ? totalSpend / spendRows.length : 0;
-      const savingsRate = totalIncome ? (netCash / totalIncome) * 100 : 0;
-
-      const categoryMap = {};
-      spendRows.forEach(t => categoryMap[t.c] = (categoryMap[t.c] || 0) - t.f);
-      const catEntries = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
-      const topCategory = catEntries[0];
-
-      const merchantMap = {};
-      filtered.forEach(t => {
-        merchantMap[t.m] = (merchantMap[t.m] || 0) + t.f;
-      });
-      const topMerchant = Object.entries(merchantMap).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
-
-      const monthlyMap = {};
-      spendRows.forEach(t => {
-        const key = t.date.slice(0, 7);
-        monthlyMap[key] = (monthlyMap[key] || 0) - t.f;
-      });
-      const monthlyEntries = Object.entries(monthlyMap).sort();
-      const maxMonthly = Math.max(...monthlyEntries.map(([, v]) => v), 1);
-
-      A.innerHTML = `
-        <div class="grid g4" style="margin-top:18px;">
-          <div class="card stat-card positive">
-            <div class="k">💰 Income</div>
-            <div class="v">${fmt(totalIncome)}</div>
-            <div class="stat-detail">${incomeRows.length} transactions</div>
-          </div>
-          <div class="card stat-card negative">
-            <div class="k">💸 Spending</div>
-            <div class="v">${fmt(totalSpend)}</div>
-            <div class="stat-detail">${spendRows.length} purchases</div>
-          </div>
-          <div class="card stat-card info">
-            <div class="k">📈 Net Cash</div>
-            <div class="v">${fmt(netCash)}</div>
-            <div class="stat-detail">${((netCash / totalIncome) * 100 || 0).toFixed(1)}% vs income</div>
-          </div>
-          <div class="card stat-card warning">
-            <div class="k">⏱️ Avg per Purchase</div>
-            <div class="v">${fmt(avgSpend)}</div>
-            <div class="stat-detail">${spendRows.length ? 'across spending data' : 'no spend yet'}</div>
-          </div>
-        </div>
-
-        <div class="grid g3" style="margin-top:20px;">
-          <div class="insight">
-            <div class="label">🎯 Top Category</div>
-            <div class="value">${topCategory ? `${EMOJI[topCategory[0]]} ${topCategory[0]}` : '—'}</div>
-            <div class="detail">${topCategory ? fmt(topCategory[1]) : 'No categories yet'}</div>
-          </div>
-          <div class="insight">
-            <div class="label">🏪 Biggest Merchant</div>
-            <div class="value">${topMerchant ? topMerchant[0] : '—'}</div>
-            <div class="detail">${topMerchant ? fmt(Math.abs(topMerchant[1])) : 'No merchant data'}</div>
-          </div>
-          <div class="insight">
-            <div class="label">📉 Savings Rate</div>
-            <div class="value">${isFinite(savingsRate) ? `${savingsRate.toFixed(1)}%` : '0.0%'}</div>
-            <div class="detail">${fmt(totalIncome - totalSpend)} net after spending</div>
-          </div>
-        </div>
-
-        <div class="filter-box" style="margin-top:18px;">
-          <div class="filter-row">
-            <label>From</label>
-            <input type="date" id="dateFrom" value="${S.dateFrom}">
-            <label>To</label>
-            <input type="date" id="dateTo" value="${S.dateTo}">
-            <label>Min</label>
-            <input type="number" id="amtMin" value="${S.amtMin}" min="0" step="0.01">
-            <label>Max</label>
-            <input type="number" id="amtMax" value="${S.amtMax}" min="0" step="0.01">
-            <button id="resetFilters">Reset</button>
-          </div>
-        </div>
-
-        <div class="grid g2" style="margin-top:20px;">
-          <div class="card">
-            <div class="k" style="color: var(--mut); margin-bottom: 8px;">📊 Monthly spending</div>
-            <div class="mini-bars">
-              ${monthlyEntries.map(([m, v]) => `<div><i style="height:${(v / maxMonthly) * 110}px"></i>${m.slice(5)}<br><span style="font-size:9px; color: var(--mut);">${fmtShort(v)}</span></div>`).join('') || '<div class="empty">No spending data yet</div>'}
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="k" style="color: var(--mut); margin-bottom: 8px;">🥧 Category split</div>
-            ${catEntries.slice(0, 6).map(([name, value]) => `
-              <div class="bar ${S.cat === name ? 'sel' : ''}" data-c="${name}">
-                <div class="dot" style="background:${COL[name]}; color:${COL[name]};"></div>
-                <div class="label">${EMOJI[name]} ${name}</div>
-                <div class="track"><div class="fill" style="width:${(value / (catEntries[0]?.[1] || 1)) * 100}%; background:${COL[name]};"></div></div>
-                <div class="amt">${fmt(value)}</div>
-              </div>
-            `).join('') || '<div class="empty">No spending categories yet</div>'}
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:20px;">
-          <div class="k" style="color: var(--mut); margin-bottom: 12px;">📈 Charts</div>
-          <div id="chart-wrap"></div>
-        </div>
-
-        <div class="tabs">
-          <button class="tab ${S.view === 'tx' ? 'active' : ''}" data-tab="tx">📋 Transactions</button>
-          <button class="tab ${S.view === 'mer' ? 'active' : ''}" data-tab="mer">🏪 Merchants</button>
-          <button class="tab ${S.view === 'cat' ? 'active' : ''}" data-tab="cat">📂 Categories</button>
-          <button class="tab ${S.view === 'month' ? 'active' : ''}" data-tab="month">🗓️ Months</button>
-        </div>
-
-        <div class="tools">
-          <input id="q" placeholder="🔍 Search description, merchant, or category…" value="${esc(S.q)}">
-          <button id="toggleView">${S.view === 'tx' ? 'Group by merchant' : S.view === 'month' ? 'Show transactions' : 'Show transactions'}</button>
-          ${S.cat ? `<button id="xc">Clear category filter</button>` : ''}
-        </div>
-
-        <div id="table-container" class="card tw"></div>
-        <div class="msg" style="margin-top:16px;">💡 Tip: update category values to reclassify merchants and improve future spending insight.</div>
-      `;
-
-      if (S.view === 'month') {
-        renderMonthOverview();
-      } else {
-        renderCharts(filtered);
-        renderTable(filtered, spendRows, catEntries);
-      }
-
-      $('#dateFrom').onchange = e => { S.dateFrom = e.target.value; save(); render(); };
-      $('#dateTo').onchange = e => { S.dateTo = e.target.value; save(); render(); };
-      $('#amtMin').onchange = e => { S.amtMin = Number(e.target.value) || 0; save(); render(); };
-      $('#amtMax').onchange = e => { S.amtMax = Number(e.target.value) || 999999; save(); render(); };
-      $('#resetFilters').onclick = () => { S.dateFrom = ''; S.dateTo = ''; S.amtMin = 0; S.amtMax = 999999; save(); render(); };
-      $('#toggleView').onclick = () => {
-        if (S.view === 'month') {
-          S.view = 'tx';
-        } else {
-          S.view = S.view === 'tx' ? 'mer' : 'tx';
-        }
-        render();
-      };
-      $('#xc') && ($('#xc').onclick = () => { S.cat = ''; render(); });
-      $('#q').oninput = e => {
-        S.q = e.target.value;
-        const pos = e.target.selectionStart;
-        render();
-        const input = $('#q');
-        if (input) {
-          setTimeout(() => {
-            input.focus();
-            input.setSelectionRange(pos, pos);
-          }, 0);
-        }
-      };
-
-      $$('.bar[data-c]').forEach(bar => {
-        bar.onclick = () => {
-          const c = bar.dataset.c;
-          S.cat = S.cat === c ? '' : c;
-          render();
-        };
-      });
-
-      $$('select[data-m]').forEach(s => {
-        s.onchange = () => {
-          S.rules[s.dataset.m] = s.value;
-          save();
-          render();
-        };
-      });
-
-      $$('.tab').forEach(tab => {
-        tab.onclick = () => {
-          S.view = tab.dataset.tab;
-          $$('.tab').forEach(t => t.classList.toggle('active', t === tab));
-          render();
-        };
-      });
-    }
-
-    const drop = $('#drop');
-    const fi = $('#file');
-    drop.onclick = () => fi.click();
-    fi.onchange = () => { ingest([...fi.files]); fi.value = ''; };
-    drop.ondragover = e => { e.preventDefault(); drop.classList.add('on'); };
-    drop.ondragleave = () => drop.classList.remove('on');
-    drop.ondrop = e => { e.preventDefault(); drop.classList.remove('on'); ingest([...e.dataTransfer.files]); };
-
-    $('#mode').onchange = e => { S.mode = e.target.value; save(); render(); };
-    $('#theme').onchange = e => { S.theme = e.target.value; setTheme(S.theme); save(); };
-    $('#clr').onclick = () => {
-      if (confirm('Delete all stored financial data and custom categories?')) {
-        S.txns = [];
-        S.rules = {};
-        S.selectedMonth = '';
-        save();
-        render();
-      }
-    };
-    $('#exp').onclick = () => {
-      const rows = ['Date,Description,Merchant,Category,Amount', ...view().map(t => [t.date, `"${t.desc.replace(/"/g, '""')}"`, t.m, t.c, t.f.toFixed(2)].join(','))];
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
-      a.download = 'spending-analysis-' + new Date().toISOString().slice(0, 10) + '.csv';
-      a.click();
-    };
-
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      if (S.theme === 'auto') setTheme('auto');
-    });
-
-    load();
-    setTheme(S.theme);
-    render();
-  </script>
+  <div id="toast" class="toast" hidden role="status">
+    <span id="toastText"></span>
+    <button type="button" id="toastAction" hidden>Undo</button>
+  </div>
+
+  <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

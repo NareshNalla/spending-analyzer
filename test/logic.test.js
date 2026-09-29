@@ -1,0 +1,295 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const L = require('../logic.js');
+
+const example = name => fs.readFileSync(path.join(__dirname, '../examples', name), 'utf8');
+
+test('parses ISO, US, and month-name dates and rejects impossible days', () => {
+  assert.equal(L.parseDate('2026-01-05', 2020), '2026-01-05');
+  assert.equal(L.parseDate('2026/01/05', 2020), '2026-01-05');
+  assert.equal(L.parseDate('01/05/2026', 2020), '2026-01-05');
+  assert.equal(L.parseDate('1-5-26', 2020), '2026-01-05');
+  assert.equal(L.parseDate('Jan 7, 2026', 2020), '2026-01-07');
+  assert.equal(L.parseDate('7 Jan 2026', 2020), '2026-01-07');
+  assert.equal(L.parseDate('Jan 7', 2026), '2026-01-07');
+  assert.equal(L.parseDate('02/31/2026', 2026), null);
+  assert.equal(L.parseDate('02/29/2024', 2024), '2024-02-29');
+  assert.equal(L.parseDate('02/29/2025', 2025), null);
+  assert.equal(L.parseDate('Date', 2026), null);
+});
+
+test('parses bank amount spellings', () => {
+  assert.equal(L.parseMoney('3200.00'), 3200);
+  assert.equal(L.parseMoney('-86.42'), -86.42);
+  assert.equal(L.parseMoney('$1,234.56'), 1234.56);
+  assert.equal(L.parseMoney('(12.50)'), -12.5);
+  assert.equal(L.parseMoney('($1,234.56)'), -1234.56);
+  assert.equal(L.parseMoney('12.50 CR'), 12.5);
+  assert.equal(L.parseMoney('12.50DR'), -12.5);
+  assert.equal(L.parseMoney('40.00-'), -40);
+  assert.equal(L.parseMoney('12,50'), 12.5);
+  assert.equal(L.parseMoney('1.234,56'), 1234.56);
+  assert.equal(L.parseMoney(''), NaN);
+  assert.equal(L.parseMoney('KROGER'), NaN);
+  assert.equal(L.parseMoney('2026-01-05'), NaN);
+});
+
+test('headerless date, description, amount still imports', () => {
+  const parsed = L.parseCsv('01/05/2026,PAYROLL ACME CORP,3200.00\n01/06/2026,KROGER #123,-86.42\n');
+  assert.equal(parsed.txns.length, 2);
+  assert.deepEqual(parsed.txns[0], { date: '2026-01-05', desc: 'PAYROLL ACME CORP', raw: 3200 });
+  assert.equal(parsed.txns[1].raw, -86.42);
+  assert.equal(parsed.txns[1].desc, 'KROGER #123');
+});
+
+test('simple example keeps quoted commas in the description', () => {
+  const parsed = L.parseCsv('\uFEFF' + example('simple.csv'));
+  assert.equal(parsed.txns.length, 5);
+  const amazon = parsed.txns.find(t => t.date === '2026-01-06');
+  assert.equal(amazon.desc, 'AMAZON MARKETPLACE, SEATTLE');
+  assert.equal(amazon.raw, -42.18);
+});
+
+test('balance column is not treated as the transaction amount', () => {
+  const parsed = L.parseCsv(example('bank-with-balance.csv'));
+  assert.equal(parsed.txns.length, 6);
+  const payroll = parsed.txns[0];
+  assert.equal(payroll.desc, 'PAYROLL, ACME CORP');
+  assert.equal(payroll.raw, 3200);
+  assert.notEqual(payroll.raw, 5200);
+  const coffee = parsed.txns.find(t => t.desc.includes('COFFEE'));
+  assert.equal(coffee.raw, -12.5);
+  const refund = parsed.txns.find(t => t.desc.startsWith('REFUND'));
+  assert.equal(refund.raw, 12.5);
+  const atm = parsed.txns.find(t => t.desc.startsWith('ATM'));
+  assert.equal(atm.raw, -40);
+});
+
+test('headerless running balance is detected', () => {
+  const csv = [
+    '2026-01-05,PAYROLL ACME,3200.00,5200.00',
+    '2026-01-06,KROGER,-86.42,5113.58',
+    '2026-01-15,RENT PAYMENT,-1450.00,3663.58'
+  ].join('\n');
+  const parsed = L.parseCsv(csv);
+  assert.deepEqual(parsed.txns.map(t => t.raw), [3200, -86.42, -1450]);
+  assert.equal(parsed.txns[1].desc, 'KROGER');
+});
+
+test('debit and credit columns become signed amounts', () => {
+  const parsed = L.parseCsv(example('debit-credit.csv'));
+  assert.deepEqual(parsed.txns.map(t => [t.desc, t.raw]), [
+    ['STARBUCKS', -6.25],
+    ['AMAZON.COM', -54.1],
+    ['PAYMENT THANK YOU', 200],
+    ['SHELL GAS', -40]
+  ]);
+});
+
+test('chase-like export uses transaction date, description, and amount', () => {
+  const parsed = L.parseCsv(example('chase-like.csv'));
+  assert.equal(parsed.txns.length, 3);
+  assert.equal(parsed.txns[0].date, '2026-01-15');
+  assert.equal(parsed.txns[0].desc, 'STARBUCKS STORE 1234');
+  assert.equal(parsed.txns[0].raw, -5.75);
+  assert.equal(parsed.txns[0].category, undefined);
+  assert.equal(parsed.txns[2].desc, 'TARGET STORE');
+  assert.equal(parsed.txns[2].raw, -28.19);
+});
+
+test('preamble before the header is ignored', () => {
+  const csv = 'My Checking\nExported 2026-04-01\n\nDate,Description,Amount\n01/02/2026,COFFEE SHOP,-4.50\n';
+  const parsed = L.parseCsv(csv);
+  assert.equal(parsed.txns.length, 1);
+  assert.equal(parsed.txns[0].desc, 'COFFEE SHOP');
+});
+
+test('empty and unreadable files produce no transactions and a hint', () => {
+  assert.deepEqual(L.parseCsv('').txns, []);
+  assert.equal(L.parseCsv('hello world\nnot a table').txns.length, 0);
+  assert.match(L.parseCsv('Date,Notes\n01/01/2026,no amount').hint, /amount/i);
+});
+
+test('semicolon-separated rows import', () => {
+  const parsed = L.parseCsv('Date;Description;Amount\n01/02/2026;CAFE; -4.50\n');
+  assert.equal(parsed.txns.length, 1);
+  assert.equal(parsed.txns[0].raw, -4.5);
+  assert.equal(parsed.txns[0].desc, 'CAFE');
+});
+
+test('statement lines skip summaries, keep Total Wine, and prefer the transaction amount', () => {
+  const lines = [
+    'Beginning balance 1,000.00',
+    '01/05/2026 PAYROLL ACME CORP 3,200.00 5,200.00',
+    '01/06/2026 KROGER #123 -86.42 5,113.58',
+    '01/07/2026 TOTAL WINE 40.00 4,000.00',
+    'Total purchases 126.42',
+    'Jan 08 NETFLIX.COM 15.49',
+    '01/09/2026 AMAZON REFUND 12.50 CR',
+    '7 Jan 2026 SHELL OIL 48.20'
+  ];
+  const txns = L.parseStatementLines(lines, 2026);
+  assert.deepEqual(txns.map(t => [t.date, t.desc, t.raw]), [
+    ['2026-01-05', 'PAYROLL ACME CORP', 3200],
+    ['2026-01-06', 'KROGER #123', -86.42],
+    ['2026-01-07', 'TOTAL WINE', 40],
+    ['2026-01-08', 'NETFLIX.COM', 15.49],
+    ['2026-01-09', 'AMAZON REFUND', 12.5],
+    ['2026-01-07', 'SHELL OIL', 48.2]
+  ]);
+});
+
+test('statement line with a posted date does not eat the description', () => {
+  const txns = L.parseStatementLines(['01/15/2026 01/16/2026 STARBUCKS STORE 5.75'], 2026);
+  assert.equal(txns.length, 1);
+  assert.equal(txns[0].date, '2026-01-15');
+  assert.equal(txns[0].desc, 'STARBUCKS STORE');
+  assert.equal(txns[0].raw, 5.75);
+});
+
+test('merchant names keep the useful words', () => {
+  assert.equal(L.merchant('POS DEBIT AMAZON STORE 123'), 'Amazon Store');
+  assert.equal(L.merchant('SQ *STARBUCKS'), 'Starbucks');
+  assert.equal(L.merchant('CHECKCARD STARBUCKS'), 'Starbucks');
+  assert.equal(L.merchant('RENT PAYMENT'), 'Rent');
+  assert.equal(L.merchant('KROGER #123'), 'Kroger');
+  assert.equal(L.merchant('ZELLE PAYMENT TO JORDAN'), 'Zelle Jordan');
+  assert.equal(L.merchant('NETFLIX.COM'), 'Netflix');
+  assert.equal(L.merchant("TRADER JOE'S"), "Trader Joe's");
+});
+
+test('categories avoid the old false positives', () => {
+  assert.equal(L.autoCategory('AMAZON MARKETPLACE'), 'Shopping');
+  assert.equal(L.autoCategory('WHOLE FOODS MARKET'), 'Groceries');
+  assert.equal(L.autoCategory('PUBLIX SUPERMARKET'), 'Groceries');
+  assert.equal(L.autoCategory('MARKETING AGENCY'), 'Other');
+  assert.equal(L.autoCategory('COFFEE BEAN'), 'Dining');
+  assert.equal(L.autoCategory('CITY FEE'), 'Fees');
+  assert.equal(L.autoCategory('FACEBOOK ADS'), 'Other');
+  assert.equal(L.autoCategory('INTEREST CHARGE'), 'Fees');
+  assert.equal(L.autoCategory('INTEREST PAID'), 'Income');
+  assert.equal(L.autoCategory('UBER EATS'), 'Dining');
+  assert.equal(L.autoCategory('UBER TRIP'), 'Transport');
+  assert.equal(L.autoCategory('PAYMENT THANK YOU'), 'Transfers');
+  assert.equal(L.autoCategory('RESTORE HARDWARE'), 'Other');
+  assert.equal(L.autoCategory('DELTA AIR LINES'), 'Travel');
+});
+
+test('a saved category rule overrides the guess', () => {
+  const txn = { desc: 'AMAZON MARKETPLACE', m: 'Amazon' };
+  assert.equal(L.categoryOf(txn, { Amazon: 'Groceries' }), 'Groceries');
+  assert.equal(L.categoryOf(txn, {}), 'Shopping');
+});
+
+test('migration repairs merchant keys and keeps category overrides', () => {
+  const migrated = L.migrate(
+    [{ date: '2026-01-06', desc: 'KROGER #123', raw: -10, m: 'Kroger ' }],
+    { 'Kroger ': 'Health' }
+  );
+  assert.equal(migrated.txns[0].m, 'Kroger');
+  assert.equal(migrated.rules.Kroger, 'Health');
+  assert.ok(migrated.txns[0].id);
+
+  const blank = L.migrate(
+    [{ date: '2026-01-01', desc: 'POS DEBIT AMAZON STORE 123', raw: -10, m: ' ' }],
+    { ' ': 'Shopping' }
+  );
+  assert.equal(blank.txns[0].m, 'Amazon Store');
+  assert.equal(blank.rules['Amazon Store'], 'Shopping');
+  assert.equal(blank.rules[' '], undefined);
+});
+
+test('amount style follows purchase signs, not a single negative payment', () => {
+  const bank = L.parseCsv(example('simple.csv')).txns;
+  assert.equal(L.resolveMode(bank, 'auto', {}), 'bank');
+  assert.equal(L.resolveMode(bank, 'card', {}), 'card');
+
+  const card = L.parseCsv(example('card-charges.csv')).txns;
+  assert.equal(L.resolveMode(card, 'auto', {}), 'card');
+
+  const debits = L.parseCsv(example('debit-credit.csv')).txns;
+  assert.equal(L.resolveMode(debits, 'auto', {}), 'bank');
+
+  const savings = [
+    { desc: 'PAYROLL ACME', raw: 3000 },
+    { desc: 'PAYROLL ACME', raw: 3000 },
+    { desc: 'KROGER', raw: -40 }
+  ];
+  assert.equal(L.resolveMode(savings, 'auto', {}), 'bank');
+});
+
+test('sample totals exclude transfers and do not call payroll the top merchant', () => {
+  const { mode, rows } = L.decorate(L.SAMPLE_TXNS, 'auto', {});
+  assert.equal(mode, 'bank');
+  const summary = L.summarize(rows);
+  assert.equal(summary.totalIncome, 9650);
+  assert.equal(summary.spendCount, 28);
+  assert.equal(summary.incomeCount, 4);
+  assert.equal(summary.topCategory.name, 'Housing');
+  assert.equal(summary.topCategory.amount, 4350);
+  assert.equal(summary.topMerchant.name, 'Rent');
+  assert.equal(summary.topMerchant.amount, 4350);
+  assert.notEqual(summary.topMerchant.name, 'Payroll Acme');
+  const zelle = rows.find(t => t.desc.startsWith('ZELLE'));
+  assert.equal(zelle.c, 'Transfers');
+  assert.equal(L.isSpend(zelle), false);
+  assert.equal(L.isIncome(zelle), false);
+  assert.equal(summary.months.length, 3);
+  assert.ok(summary.months.every(m => m.spend > 0));
+  const jan = summary.months[0];
+  assert.equal(jan.month, '2026-01');
+  assert.ok(jan.spend < 2015, 'January spend should not include the $200 transfer');
+  assert.equal(summary.mom.cur.month, '2026-03');
+  assert.ok(summary.recurring.some(r => r.name === 'Netflix' && r.months === 3));
+  assert.ok(summary.recurring.some(r => r.name === 'Rent' && r.months === 3));
+});
+
+test('filters understand a max of zero and a search', () => {
+  const { rows } = L.decorate(L.SAMPLE_TXNS, 'bank', {});
+  const none = L.filterRows(rows, { amtMax: 0, amtMin: 0 });
+  assert.equal(none.length, 0);
+  const rent = L.filterRows(rows, { q: 'rent', cat: 'Housing' });
+  assert.equal(rent.length, 3);
+  const january = L.filterRows(rows, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+  assert.ok(january.every(t => t.date.startsWith('2026-01')));
+  assert.ok(january.length > 0);
+});
+
+test('month labels use the local calendar month', () => {
+  assert.equal(L.monthTick('2026-01', false), 'Jan');
+  assert.match(L.formatMonth('2026-01', true), /January/);
+  assert.match(L.formatMonth('2026-01', true), /2026/);
+  const script = `
+    const L = require(${JSON.stringify(path.join(__dirname, '../logic.js'))});
+    const label = L.formatMonth('2026-01', true);
+    if (label !== 'January 2026') {
+      console.error(label);
+      process.exit(1);
+    }
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], {
+    env: { ...process.env, TZ: 'America/Los_Angeles' }
+  });
+  assert.equal(result.status, 0, String(result.stderr || result.stdout));
+});
+
+test('export round-trips displayed amounts and escapes commas', () => {
+  const { rows } = L.decorate([
+    { date: '2026-01-06', desc: 'AMAZON, SEATTLE', raw: -42.18, m: 'Amazon' }
+  ], 'bank', {});
+  const csv = L.exportCsv(rows);
+  assert.match(csv.split('\n')[0], /^Date,Description,Merchant,Category,Amount$/);
+  assert.match(csv, /"AMAZON, SEATTLE"/);
+  const parsed = L.parseCsv(csv);
+  assert.equal(parsed.txns.length, 1);
+  assert.equal(parsed.txns[0].desc, 'AMAZON, SEATTLE');
+  assert.equal(parsed.txns[0].raw, -42.18);
+  assert.equal(parsed.txns[0].category, 'Shopping');
+});
+
+test('storage key stays spend_v3', () => {
+  assert.equal(L.STORAGE_KEY, 'spend_v3');
+});

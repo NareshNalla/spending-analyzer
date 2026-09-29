@@ -1,0 +1,683 @@
+/* Pure spending-analyzer logic. No DOM. Loaded as a classic script in the browser
+   and as a CommonJS module from node tests. */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.SpendLogic = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  // localStorage key and payload fields (t, r, m, f, to, amn, amx, th, sm) are
+  // part of the on-disk format. New optional field: v (active tab).
+  const STORAGE_KEY = 'spend_v3';
+
+  const CATS = [
+    ['Income', '#16a34a', /payroll|direct deposit|direct dep|salary|paycheck|\bbonus\b|dividend|\brefund\b|reversal|interest paid/i, '💰'],
+    ['Transfers', '#64748b', /zelle|venmo|paypal|cash app|\btransfers?\b|\btransferred\b|autopay|payment\W{0,6}thank|online payment|\bwire\b|credit card pmt|\bepay\b/i, '↔'],
+    ['Fees', '#dc2626', /\bfees?\b|interest charge|overdraft|finance charge|\bpenalty\b/i, '!'],
+    ['Dining', '#ea580c', /restaurant|\bcafe\b|\bcoffee\b|starbucks|mcdonald|chipotle|pizza|doordash|uber\s?eats|ubereats|grubhub|dunkin|subway|\btaco\b|\bgrill\b|\bdiner\b|\bbbq\b|burger|bakery|biryani|wingstop|chick-fil/i, '🍴'],
+    ['Groceries', '#15803d', /kroger|publix|walmart|aldi|whole foods|trader joe|costco|safeway|grocery|patel|\bh mart\b|sprouts|instacart|supermarket|\bmarkets?\b/i, '🛒'],
+    ['Transport', '#0284c7', /\bshell\b|chevron|exxon|\bbp\b|\bgas\b|\bfuel\b|\buber\b|\blyft\b|marta|parking|\btoll\b|racetrac|quiktrip|\bqt\b|citgo|mobil|peach pass|transit/i, '🚌'],
+    ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|\bsubscription\b|patreon|icloud/i, '▶'],
+    ['Utilities', '#a16207', /electric|georgia power|\bwater\b|internet|comcast|xfinity|at&t|verizon|t-mobile|\butility\b|insurance|geico|state farm|allstate|spectrum|\bgas co\b|atmos|\bphone\b|\bcable\b/i, '⚡'],
+    ['Health', '#be185d', /\bcvs\b|walgreens|pharmacy|clinic|hospital|dental|medical|\bhealth\b|doctor|vision|optum|aetna|labcorp|quest diag/i, '+'],
+    ['Housing', '#0f766e', /\brent\b|mortgage|\bhoa\b|\blease\b|apartment|property|homeowner/i, '⌂'],
+    ['Travel', '#4f46e5', /airline|delta air|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|\bflights?\b|motel|\btrips?\b/i, '✈'],
+    ['Entertainment', '#c026d3', /\bamc\b|cinema|movie|ticketmaster|steam|\bgames?\b|gamestop|concert|bowling|theater|\bshow\b/i, '★'],
+    ['Shopping', '#e11d48', /amazon|\bamzn\b|\btarget\b|best buy|ebay|etsy|home depot|\blowes?\b|\blowe's\b|ikea|\bnike\b|\bmacy\b|tj maxx|marshalls|\bshops?\b|\bstores?\b|retail/i, '🛍'],
+    ['Education', '#4d7c0f', /tuition|\bschool\b|university|udemy|coursera|\bbooks?\b|\bclasses?\b|\bcourse\b|training|seminar/i, '📚'],
+    ['Other', '#475569', /^$/, '•']
+  ];
+
+  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  const DATE_RANKS = ['transaction date', 'trans date', 'txn date', 'date', 'posted date', 'posting date', 'post date', 'date posted'];
+  const DESC_RANKS = ['description', 'transaction description', 'desc', 'narrative', 'details', 'payee', 'name', 'memo', 'merchant'];
+  const AMOUNT_NAMES = new Set(['amount', 'amt', 'transaction amount', 'amount usd', 'amount $']);
+  const DEBIT_NAMES = new Set(['debit', 'debits', 'withdrawal', 'withdrawals', 'money out', 'outflow', 'paid out']);
+  const CREDIT_NAMES = new Set(['credit', 'credits', 'deposit', 'deposits', 'money in', 'inflow', 'paid in']);
+  const BALANCE_NAMES = new Set(['balance', 'running balance', 'running bal', 'available balance', 'ending balance', 'current balance']);
+  const DATE_TOKEN = String.raw`\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?|[A-Za-z]{3}[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{4})?|\d{1,2}[- ][A-Za-z]{3}[a-z]*(?:[- ,]+\d{2,4})?`;
+  const LINE_RE = new RegExp('^(' + DATE_TOKEN + ')\\s+(.+)$');
+  const SECOND_DATE_RE = /^(\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?)\s+(.*)$/;
+  // Commas optional, so both 3,200.00 and 3200.00 match. Cents stay required so
+  // years and account numbers on a statement line are less likely to match.
+  const AMT_SRC = String.raw`(?<![\w.])\(?[-+]?\$?\s?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})\)?(?:-|\s?(?:CR|DB|DR))?(?![\w])`;
+  const SUMMARY_LINE = /(beginning|ending|opening|closing|previous|new|available)\s+balance|credit limit|minimum payment|account summary/i;
+  const SUMMARY_DESC = /^(total|subtotal|totals|total (purchases|debits|credits|withdrawals|deposits|fees|payments|amount|charges))$/i;
+
+  const SAMPLE_TXNS = [
+    ['2026-01-05', 'PAYROLL ACME CORP', 3200],
+    ['2026-01-03', 'ZELLE PAYMENT TO JORDAN', -200],
+    ['2026-01-06', 'KROGER #123', -86.42],
+    ['2026-01-07', 'STARBUCKS STORE 1234', -5.75],
+    ['2026-01-08', 'SHELL OIL 5678', -48.2],
+    ['2026-01-09', 'NETFLIX.COM', -15.49],
+    ['2026-01-10', 'AMAZON MARKETPLACE', -42.18],
+    ['2026-01-12', 'UBER TRIP', -18.6],
+    ['2026-01-15', 'RENT PAYMENT', -1450],
+    ['2026-01-18', 'GEORGIA POWER', -96.3],
+    ['2026-01-20', 'CHIPOTLE 1122', -13.45],
+    ['2026-01-22', 'CVS PHARMACY', -24.1],
+    ['2026-01-28', 'SPOTIFY USA', -11.99],
+    ['2026-01-30', 'INTEREST CHARGE', -3.2],
+    ['2026-02-05', 'PAYROLL ACME CORP', 3200],
+    ['2026-02-06', 'PUBLIX SUPERMARKET', -92.1],
+    ['2026-02-08', 'DOORDASH MCDONALDS', -27.4],
+    ['2026-02-10', 'NETFLIX.COM', -15.49],
+    ['2026-02-14', 'DELTA AIR LINES', -286],
+    ['2026-02-15', 'RENT PAYMENT', -1450],
+    ['2026-02-20', 'WHOLE FOODS MARKET', -64.22],
+    ['2026-02-25', 'AMAZON PRIME', -14.99],
+    ['2026-02-27', 'GEICO INSURANCE', -142],
+    ['2026-03-02', 'AMAZON REFUND', 50],
+    ['2026-03-05', 'PAYROLL ACME CORP', 3200],
+    ['2026-03-07', "TRADER JOE'S", -71.55],
+    ['2026-03-09', 'UBER EATS', -32.1],
+    ['2026-03-12', 'CHEVRON GAS', -51.8],
+    ['2026-03-15', 'RENT PAYMENT', -1450],
+    ['2026-03-18', 'NETFLIX.COM', -15.49],
+    ['2026-03-22', 'TARGET STORE', -88.4],
+    ['2026-03-25', 'AMC THEATERS', -28],
+    ['2026-03-28', 'APPLE.COM/BILL', -9.99]
+  ].map(([date, desc, raw]) => ({ date, desc, raw }));
+
+  function round2(n) {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function categories() {
+    return CATS.map(c => ({ name: c[0], color: c[1], mark: c[3] }));
+  }
+
+  function canonicalCategory(name) {
+    const hit = CATS.find(c => c[0].toLowerCase() === String(name || '').trim().toLowerCase());
+    return hit ? hit[0] : null;
+  }
+
+  function merchant(d) {
+    const original = String(d || '');
+    const skip = new Set(['TO', 'FROM', 'THE', 'FOR', 'AND', 'OF', 'AT', 'WITH', 'A', 'AN', 'COM', 'WWW']);
+    let s = original.toUpperCase()
+      .replace(/\b(POS|DEBIT|CREDIT|CARD|PURCHASE|CHECKCARD|CHECK|VISA|ACH|WITHDRAWAL|RECURRING|PMT|PAYMENT|ONLINE|TST|SQ|PP)\b/g, ' ')
+      .replace(/[#*\d\/\\:.,_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    s = s.split(' ').filter(w => w && !skip.has(w)).slice(0, 2).join(' ');
+    if (!s) s = original.replace(/\s+/g, ' ').trim().slice(0, 24);
+    return s.toLowerCase().replace(/(^|\s)([a-z])/g, (_, lead, ch) => lead + ch.toUpperCase());
+  }
+
+  function autoCategory(desc) {
+    const text = String(desc || '');
+    for (const c of CATS) {
+      if (c[2].test(text)) return c[0];
+    }
+    return 'Other';
+  }
+
+  function categoryOf(txn, rules) {
+    const key = txn && txn.m;
+    if (key && rules && rules[key]) {
+      const known = canonicalCategory(rules[key]);
+      if (known) return known;
+    }
+    return autoCategory(txn && txn.desc);
+  }
+
+  function validDate(y, m, d) {
+    if (!Number.isInteger(y) || !Number.isInteger(m) || !Number.isInteger(d)) return null;
+    if (y < 1970 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+    return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  }
+
+  function parseDate(s, fallbackYear) {
+    if (s == null) return null;
+    s = String(s).trim();
+    if (!s) return null;
+    let m;
+    if ((m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/))) {
+      return validDate(+m[1], +m[2], +m[3]);
+    }
+    if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) {
+      let y = +m[3];
+      if (y < 100) y += 2000;
+      return validDate(y, +m[1], +m[2]);
+    }
+    if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/))) {
+      return validDate(fallbackYear, +m[1], +m[2]);
+    }
+    if ((m = s.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/))) {
+      const mo = MON[m[1].toLowerCase()];
+      if (!mo) return null;
+      return validDate(m[3] ? +m[3] : fallbackYear, mo, +m[2]);
+    }
+    if ((m = s.match(/^(\d{1,2})[- ]([A-Za-z]{3})[a-z]*(?:[- ,]+(\d{2,4}))?$/))) {
+      const mo = MON[m[2].toLowerCase()];
+      if (!mo) return null;
+      let y = m[3] ? +m[3] : fallbackYear;
+      if (y < 100) y += 2000;
+      return validDate(y, mo, +m[1]);
+    }
+    return null;
+  }
+
+  function formatMonth(ym, long) {
+    const parts = String(ym || '').split('-');
+    const y = +parts[0];
+    const m = +parts[1];
+    if (!y || !m) return String(ym || '');
+    // Local calendar date. `new Date('YYYY-MM-01')` is UTC and shifts a day
+    // behind in the Americas.
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleString('en-US', { month: long ? 'long' : 'short', year: 'numeric' });
+  }
+
+  function monthTick(ym, withYear) {
+    const parts = String(ym || '').split('-');
+    const y = +parts[0];
+    const m = +parts[1];
+    if (!y || !m) return String(ym || '');
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleString('en-US', withYear
+      ? { month: 'short', year: '2-digit' }
+      : { month: 'short' });
+  }
+
+  function parseMoney(token) {
+    if (token == null) return NaN;
+    let s = String(token).trim();
+    if (!s || s === '-' || s === '—') return NaN;
+    const paren = /^\(.*\)$/.test(s);
+    let trailMinus = false;
+    if (!paren && /-$/.test(s)) {
+      trailMinus = true;
+      s = s.replace(/-$/, '').trim();
+    }
+    let suffix = null;
+    const suf = s.match(/\s*(CR|DR|DB)\s*$/i);
+    if (suf) {
+      suffix = suf[1].toUpperCase();
+      s = s.slice(0, suf.index).trim();
+    }
+    if (paren) s = s.replace(/^\(/, '').replace(/\)$/, '').trim();
+    const leadingMinus = /^[-−]/.test(s);
+    s = s.replace(/^[-−+]/, '').replace(/\$/g, '').replace(/\s/g, '');
+    let numStr;
+    if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s) || /^\d+,\d{1,2}$/.test(s)) {
+      numStr = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      numStr = s.replace(/,/g, '');
+    }
+    if (!/^\d+(\.\d+)?$/.test(numStr)) return NaN;
+    const n = parseFloat(numStr);
+    if (!Number.isFinite(n)) return NaN;
+    if (suffix === 'CR') return round2(Math.abs(n));
+    if (paren || trailMinus || suffix === 'DR' || suffix === 'DB' || leadingMinus) return round2(-Math.abs(n));
+    return round2(n);
+  }
+
+  function looksLikeMoney(token) {
+    const s = String(token ?? '').trim();
+    if (!s || s.length > 40) return false;
+    if (/^20\d{2}$/.test(s)) return false;
+    if (parseDate(s, 2000)) return false;
+    return Number.isFinite(parseMoney(s));
+  }
+
+  function detectDelimiter(text) {
+    const sample = text.slice(0, 8000);
+    const counts = { ',': 0, ';': 0, '\t': 0 };
+    let inQuotes = false;
+    for (let i = 0; i < sample.length; i++) {
+      const c = sample[i];
+      if (c === '"') {
+        if (inQuotes && sample[i + 1] === '"') { i++; continue; }
+        inQuotes = !inQuotes;
+      } else if (!inQuotes && Object.prototype.hasOwnProperty.call(counts, c)) {
+        counts[c]++;
+      }
+    }
+    if (counts['\t'] > counts[','] && counts['\t'] > counts[';']) return '\t';
+    if (counts[';'] > counts[',']) return ';';
+    return ',';
+  }
+
+  function parseCsvTable(text) {
+    const cleaned = String(text || '').replace(/^\uFEFF/, '');
+    const delimiter = detectDelimiter(cleaned);
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let inQuotes = false;
+    for (let i = 0; i < cleaned.length; i++) {
+      const c = cleaned[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (cleaned[i + 1] === '"') { cell += '"'; i++; }
+          else inQuotes = false;
+        } else cell += c;
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === delimiter) {
+        row.push(cell.trim());
+        cell = '';
+      } else if (c === '\n') {
+        row.push(cell.trim());
+        if (row.some(Boolean)) rows.push(row);
+        row = [];
+        cell = '';
+      } else if (c !== '\r') {
+        cell += c;
+      }
+    }
+    if (cell.length || row.length) {
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+    }
+    return rows;
+  }
+
+  function normHeader(h) {
+    return String(h || '').toLowerCase().replace(/[_./]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function headerIndex(names, ranks) {
+    let best = 99;
+    let idx = -1;
+    names.forEach((n, i) => {
+      const rank = ranks.indexOf(n);
+      if (rank !== -1 && rank < best) { best = rank; idx = i; }
+    });
+    return idx;
+  }
+
+  function mapHeaders(cells) {
+    const names = cells.map(normHeader);
+    if (!names.some(Boolean)) return null;
+    let dateIdx = headerIndex(names, DATE_RANKS);
+    if (dateIdx === -1) dateIdx = names.findIndex(n => /(^| )date($| )/.test(n));
+    let amountIdx = names.findIndex(n => AMOUNT_NAMES.has(n));
+    if (amountIdx === -1) amountIdx = names.findIndex(n => n.includes('amount') && !n.includes('balance'));
+    const debitIdx = names.findIndex(n => DEBIT_NAMES.has(n));
+    const creditIdx = names.findIndex(n => CREDIT_NAMES.has(n));
+    const balanceIdx = names.findIndex(n => BALANCE_NAMES.has(n) || (n.includes('balance') && !n.includes('amount')));
+    const descIdx = headerIndex(names, DESC_RANKS);
+    const catIdx = names.findIndex(n => n === 'category');
+    if (dateIdx === -1) return null;
+    if (amountIdx === -1 && debitIdx === -1 && creditIdx === -1) return null;
+    return { dateIdx, amountIdx, debitIdx, creditIdx, balanceIdx, descIdx, catIdx };
+  }
+
+  function findHeader(rows) {
+    const limit = Math.min(rows.length, 25);
+    for (let i = 0; i < limit; i++) {
+      const mapping = mapHeaders(rows[i]);
+      if (mapping) return { index: i, mapping };
+    }
+    return null;
+  }
+
+  function inferYear(rows) {
+    let y = null;
+    for (const cols of rows) {
+      for (const c of cols) {
+        const m = String(c).match(/\b(20\d{2})\b/);
+        if (m) y = Math.max(y || 0, +m[1]);
+      }
+    }
+    return y || new Date().getFullYear();
+  }
+
+  function combineDebitCredit(debitCell, creditCell) {
+    const d = parseMoney(debitCell);
+    const c = parseMoney(creditCell);
+    const hasD = Number.isFinite(d) && d !== 0;
+    const hasC = Number.isFinite(c) && c !== 0;
+    if (!hasD && !hasC) return NaN;
+    let raw = 0;
+    if (hasD) raw -= Math.abs(d);
+    if (hasC) raw += Math.abs(c);
+    return round2(raw);
+  }
+
+  function rowFromMapping(cols, mapping, year) {
+    const date = parseDate(cols[mapping.dateIdx], year);
+    if (!date) return null;
+    let raw = NaN;
+    if (mapping.amountIdx >= 0) {
+      const cell = cols[mapping.amountIdx] || '';
+      if (String(cell).trim()) raw = parseMoney(cell);
+    }
+    if (!Number.isFinite(raw) && (mapping.debitIdx >= 0 || mapping.creditIdx >= 0)) {
+      raw = combineDebitCredit(
+        mapping.debitIdx >= 0 ? cols[mapping.debitIdx] : '',
+        mapping.creditIdx >= 0 ? cols[mapping.creditIdx] : ''
+      );
+    }
+    if (!Number.isFinite(raw)) return null;
+    let desc = mapping.descIdx >= 0 ? (cols[mapping.descIdx] || '') : '';
+    if (!String(desc).trim()) {
+      const skip = new Set([mapping.dateIdx, mapping.amountIdx, mapping.debitIdx, mapping.creditIdx, mapping.catIdx, mapping.balanceIdx]);
+      desc = cols.filter((c, i) => !skip.has(i) && c && !looksLikeMoney(c) && !parseDate(c, year)).join(' ');
+    }
+    desc = String(desc).replace(/\s+/g, ' ').trim() || 'Unknown';
+    const txn = { date, desc, raw: round2(raw) };
+    if (mapping.catIdx >= 0) {
+      const category = canonicalCategory(cols[mapping.catIdx]);
+      if (category) txn.category = category;
+    }
+    return txn;
+  }
+
+  function headerlessTransactions(rows, year) {
+    const candidates = [];
+    rows.forEach(cols => {
+      if (!cols || !cols.length) return;
+      const date = parseDate(cols[0], year);
+      if (!date) return;
+      const moneyIdxs = [];
+      cols.forEach((c, i) => { if (i > 0 && looksLikeMoney(c)) moneyIdxs.push(i); });
+      if (!moneyIdxs.length) return;
+      candidates.push({ cols, date, moneyIdxs });
+    });
+    if (!candidates.length) return [];
+    let balanceAtEnd = false;
+    if (candidates.length >= 2 && candidates.every(c => c.moneyIdxs.length >= 2)) {
+      let hits = 0;
+      let checks = 0;
+      for (let i = 1; i < candidates.length; i++) {
+        const prev = candidates[i - 1];
+        const cur = candidates[i];
+        const prevBal = parseMoney(prev.cols[prev.moneyIdxs[prev.moneyIdxs.length - 1]]);
+        const curBal = parseMoney(cur.cols[cur.moneyIdxs[cur.moneyIdxs.length - 1]]);
+        const curAmt = parseMoney(cur.cols[cur.moneyIdxs[cur.moneyIdxs.length - 2]]);
+        if (![prevBal, curBal, curAmt].every(Number.isFinite)) continue;
+        checks++;
+        const delta = round2(curBal - prevBal);
+        if (Math.abs(delta - curAmt) < 0.02 || Math.abs(delta + curAmt) < 0.02) hits++;
+      }
+      if (checks && hits / checks >= 0.6) balanceAtEnd = true;
+    }
+    return candidates.map(c => {
+      const idxs = c.moneyIdxs;
+      const amountIdx = balanceAtEnd && idxs.length >= 2 ? idxs[idxs.length - 2] : idxs[idxs.length - 1];
+      const ignore = new Set([0, amountIdx]);
+      if (balanceAtEnd && idxs.length >= 2) ignore.add(idxs[idxs.length - 1]);
+      const desc = c.cols
+        .filter((cell, i) => !ignore.has(i) && cell && !looksLikeMoney(cell))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim() || 'Unknown';
+      return { date: c.date, desc, raw: round2(parseMoney(c.cols[amountIdx])) };
+    }).filter(t => Number.isFinite(t.raw));
+  }
+
+  function parseCsv(text) {
+    const rows = parseCsvTable(text);
+    const hint = 'Expected a date and an amount (headers like Date, Description, Amount — or Debit and Credit). A headerless file should be date, description, amount.';
+    if (!rows.length) return { txns: [], skipped: 0, hint };
+    const year = inferYear(rows);
+    const header = findHeader(rows);
+    if (!header) {
+      const txns = headerlessTransactions(rows, year);
+      return { txns, skipped: 0, hint: txns.length ? '' : hint };
+    }
+    const txns = [];
+    let skipped = 0;
+    for (let i = header.index + 1; i < rows.length; i++) {
+      const txn = rowFromMapping(rows[i], header.mapping, year);
+      if (txn) txns.push(txn);
+      else if (rows[i].some(Boolean)) skipped++;
+    }
+    return { txns, skipped, hint: txns.length ? '' : hint };
+  }
+
+  function parseStatementLines(lines, year) {
+    const fallback = year || new Date().getFullYear();
+    const out = [];
+    for (const line of lines || []) {
+      const ln = String(line || '').replace(/\s+/g, ' ').trim();
+      if (!ln || SUMMARY_LINE.test(ln)) continue;
+      const m = ln.match(LINE_RE);
+      if (!m) continue;
+      let rest = m[2];
+      const second = rest.match(SECOND_DATE_RE);
+      if (second && parseDate(second[1], fallback)) rest = second[2];
+      const amounts = rest.match(new RegExp(AMT_SRC, 'gi'));
+      if (!amounts) continue;
+      const pick = amounts.length <= 2 ? amounts[0] : amounts[amounts.length - 2];
+      const date = parseDate(m[1], fallback);
+      if (!date) continue;
+      let desc = rest.replace(new RegExp(AMT_SRC, 'gi'), ' ').replace(/\s+/g, ' ').trim();
+      if (desc.length < 2 || SUMMARY_DESC.test(desc)) continue;
+      const raw = parseMoney(pick);
+      if (!Number.isFinite(raw)) continue;
+      out.push({ date, desc, raw });
+    }
+    return out;
+  }
+
+  function flow(raw, mode) {
+    return mode === 'card' ? -raw : raw;
+  }
+
+  function resolveMode(txns, preference, rules) {
+    if (preference === 'bank' || preference === 'card') return preference;
+    let neg = 0;
+    let pos = 0;
+    let voteNeg = 0;
+    let votePos = 0;
+    for (const t of txns || []) {
+      if (!t || !Number.isFinite(t.raw) || t.raw === 0) continue;
+      if (t.raw < 0) neg++;
+      else pos++;
+      const m = t.m || merchant(t.desc || '');
+      const c = categoryOf({ ...t, m }, rules || {});
+      if (c === 'Income' || c === 'Transfers' || c === 'Other') continue;
+      if (t.raw < 0) voteNeg++;
+      else votePos++;
+    }
+    if (votePos > voteNeg) return 'card';
+    if (voteNeg > votePos) return 'bank';
+    return neg === 0 && pos > 0 ? 'card' : 'bank';
+  }
+
+  function isSpend(t) {
+    return t.f < 0 && t.c !== 'Transfers';
+  }
+
+  function isIncome(t) {
+    return t.f > 0 && t.c !== 'Transfers';
+  }
+
+  function decorate(txns, modePref, rules) {
+    const prepared = (txns || []).map(t => ({ ...t, m: t.m || merchant(t.desc || '') }));
+    const mode = resolveMode(prepared, modePref, rules || {});
+    const rows = prepared.map(t => {
+      const c = categoryOf(t, rules || {});
+      return { ...t, c, f: flow(t.raw, mode) };
+    });
+    return { mode, rows };
+  }
+
+  function filterRows(rows, q) {
+    const query = String((q && q.q) || '').trim().toLowerCase();
+    const amtMin = q && q.amtMin ? Number(q.amtMin) : 0;
+    const hasMax = q && q.amtMax != null && q.amtMax !== '' && Number.isFinite(Number(q.amtMax));
+    const amtMax = hasMax ? Number(q.amtMax) : null;
+    return (rows || []).filter(t => {
+      if (q && q.dateFrom && t.date < q.dateFrom) return false;
+      if (q && q.dateTo && t.date > q.dateTo) return false;
+      const abs = Math.abs(t.f);
+      if (abs < amtMin) return false;
+      if (amtMax != null && abs > amtMax) return false;
+      if (q && q.cat && t.c !== q.cat) return false;
+      if (query) {
+        const hay = (t.desc + ' ' + t.m + ' ' + t.c).toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    });
+  }
+
+  function categoryTotals(rows) {
+    const map = {};
+    rows.filter(isSpend).forEach(t => {
+      map[t.c] = round2((map[t.c] || 0) + (-t.f));
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }
+
+  function summarizeMonths(rows) {
+    const map = new Map();
+    for (const t of rows || []) {
+      const month = String(t.date || '').slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(month)) continue;
+      if (!map.has(month)) map.set(month, { month, income: 0, spend: 0, count: 0 });
+      const item = map.get(month);
+      item.count += 1;
+      if (isSpend(t)) item.spend = round2(item.spend + (-t.f));
+      else if (isIncome(t)) item.income = round2(item.income + t.f);
+    }
+    return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
+  }
+
+  function topSpendMerchant(rows) {
+    const map = {};
+    rows.filter(isSpend).forEach(t => {
+      map[t.m] = round2((map[t.m] || 0) + (-t.f));
+    });
+    const top = Object.entries(map).sort((a, b) => b[1] - a[1])[0];
+    return top ? { name: top[0], amount: top[1] } : null;
+  }
+
+  function largestPurchase(rows) {
+    let best = null;
+    rows.filter(isSpend).forEach(t => {
+      if (!best || -t.f > -best.f) best = t;
+    });
+    return best;
+  }
+
+  function monthOverMonth(months) {
+    if (!months || months.length < 2) return null;
+    const cur = months[months.length - 1];
+    const prev = months[months.length - 2];
+    const delta = round2(cur.spend - prev.spend);
+    const pct = prev.spend ? round2((delta / prev.spend) * 100) : null;
+    return { cur, prev, delta, pct };
+  }
+
+  function recurringMerchants(rows) {
+    const map = {};
+    rows.filter(isSpend).forEach(t => {
+      const item = map[t.m] || (map[t.m] = { name: t.m, category: t.c, months: new Set(), total: 0 });
+      item.months.add(String(t.date).slice(0, 7));
+      item.total = round2(item.total + (-t.f));
+      item.category = t.c;
+    });
+    return Object.values(map)
+      .filter(item => item.months.size >= 2)
+      .map(item => ({
+        name: item.name,
+        category: item.category,
+        months: item.months.size,
+        total: item.total,
+        avg: round2(item.total / item.months.size)
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  function summarize(rows) {
+    const list = rows || [];
+    const spendRows = list.filter(isSpend);
+    const incomeRows = list.filter(isIncome);
+    const totalSpend = round2(spendRows.reduce((sum, t) => sum + (-t.f), 0));
+    const totalIncome = round2(incomeRows.reduce((sum, t) => sum + t.f, 0));
+    const net = round2(totalIncome - totalSpend);
+    const cats = categoryTotals(list);
+    const months = summarizeMonths(list);
+    return {
+      totalSpend,
+      totalIncome,
+      net,
+      avg: spendRows.length ? round2(totalSpend / spendRows.length) : 0,
+      savingsRate: totalIncome ? round2((net / totalIncome) * 100) : null,
+      spendCount: spendRows.length,
+      incomeCount: incomeRows.length,
+      topCategory: cats[0] ? { name: cats[0][0], amount: cats[0][1] } : null,
+      categories: cats,
+      topMerchant: topSpendMerchant(list),
+      largest: largestPurchase(list),
+      months,
+      mom: monthOverMonth(months),
+      recurring: recurringMerchants(list)
+    };
+  }
+
+  function csvCell(value) {
+    const s = String(value ?? '');
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function exportCsv(rows) {
+    const lines = ['Date,Description,Merchant,Category,Amount'];
+    for (const t of rows || []) {
+      lines.push([t.date, t.desc, t.m, t.c, Number(t.f).toFixed(2)].map(csvCell).join(','));
+    }
+    return lines.join('\n');
+  }
+
+  function migrate(txns, rules) {
+    const nextRules = { ...(rules || {}) };
+    const nextTxns = (txns || []).map(t => {
+      const m = merchant(t.desc || '');
+      const old = t.m;
+      if (old && old !== m && nextRules[old] && !nextRules[m]) nextRules[m] = nextRules[old];
+      const id = t.id || uid();
+      return { ...t, id, m };
+    });
+    const cleaned = {};
+    Object.keys(nextRules).forEach(key => {
+      const known = canonicalCategory(nextRules[key]);
+      if (known && String(key).trim()) cleaned[key] = known;
+    });
+    return { txns: nextTxns, rules: cleaned };
+  }
+
+  return {
+    STORAGE_KEY,
+    SAMPLE_TXNS,
+    round2,
+    uid,
+    categories,
+    canonicalCategory,
+    merchant,
+    autoCategory,
+    categoryOf,
+    parseDate,
+    formatMonth,
+    monthTick,
+    parseMoney,
+    looksLikeMoney,
+    parseCsv,
+    parseStatementLines,
+    flow,
+    resolveMode,
+    isSpend,
+    isIncome,
+    decorate,
+    filterRows,
+    summarize,
+    summarizeMonths,
+    exportCsv,
+    migrate
+  };
+});
