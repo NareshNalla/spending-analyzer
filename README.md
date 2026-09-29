@@ -18,7 +18,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Spending and savings projections on their own tab, labeled as estimates, and scoped to the selected month
 - A Savings category for money moved to savings or investments, kept out of spending
 - Changing a transaction’s category updates every saved row from that same merchant and keeps the choice for later imports. A different merchant is left alone
-- Categories for housing, utilities, household help, food, transport, family, education, health, loans, savings, and lend or borrow, including common Indian descriptions. Older names such as Groceries and Housing still work. Lend and Borrow sit together and are left out of spending and income, the same way transfers are. A Zelle or UPI payment stays a transfer unless the description says lend or borrow
+- Categories for housing, utilities, household help, food, transport (including parking, garage, and toll plaza), family, education, health, loans, savings, and lend or borrow, including common Indian descriptions. Older names such as Groceries and Housing still work. Lend and Borrow sit together and are left out of spending and income, the same way transfers are. A Zelle or UPI payment stays a transfer unless the description says lend or borrow
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
 - Built-in sample data so you can try it with no statement
