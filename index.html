@@ -6,7 +6,7 @@
   <title>Spending Analyzer</title>
   <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233730a3'/%3E%3Cpath d='M8 22h16M8 16h10M8 10h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
   <script>
     try {
       var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
@@ -53,6 +53,7 @@
         <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
         <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
         <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
+        <button type="button" class="tab section-tab" data-section="projections" role="tab" aria-selected="false">Projections</button>
       </div>
       <p class="detail" id="periodHint">Choose a year and month. Totals, categories, transactions, projections, budgets, and savings use only that month.</p>
     </div>
@@ -88,12 +89,6 @@
           <div class="cat-list" id="catBars"></div>
         </section>
       </div>
-
-      <section class="card" id="projCard" aria-label="Projections">
-        <h3>Projections</h3>
-        <p class="detail" id="projNote">Estimates, not actuals.</p>
-        <div class="proj-grid" id="projections"></div>
-      </section>
 
       <section class="card" id="recurCard" hidden>
         <h3>Repeating spend</h3>
@@ -164,6 +159,14 @@
           <p class="error" id="goalError" role="status"></p>
         </section>
       </div>
+
+      <div id="sectionProjections" hidden>
+        <section class="card" id="projCard" aria-label="Projections">
+          <h3>Projections</h3>
+          <p class="detail" id="projNote">Estimates, not actuals.</p>
+          <div class="proj-grid" id="projections"></div>
+        </section>
+      </div>
     </section>
 
     <header class="header">
@@ -202,7 +205,7 @@
   </div>
 
   <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
-  <script src="logic.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="logic.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

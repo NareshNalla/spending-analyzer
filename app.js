@@ -93,7 +93,7 @@
     S.amtMax = (d.amx == null || Number(d.amx) === 999999) ? null : Number(d.amx);
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
-    S.section = ['spend', 'budgets', 'goals'].includes(d.sec) ? d.sec : 'spend';
+    S.section = ['spend', 'budgets', 'goals', 'projections'].includes(d.sec) ? d.sec : 'spend';
     if (d.v === 'month') S.view = 'tx';
     else if (['tx', 'mer', 'cat'].includes(d.v)) S.view = d.v;
     S.budgets = L.normalizeBudgets(d.b);
@@ -695,9 +695,11 @@
     const spend = $('#sectionSpend');
     const budgets = $('#sectionBudgets');
     const goals = $('#sectionGoals');
+    const projections = $('#sectionProjections');
     if (spend) spend.hidden = S.section !== 'spend';
     if (budgets) budgets.hidden = S.section !== 'budgets';
     if (goals) goals.hidden = S.section !== 'goals';
+    if (projections) projections.hidden = S.section !== 'projections';
   }
 
   function renderPeriodBar() {

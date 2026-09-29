@@ -30,7 +30,7 @@ Status values:
 | Year-over-year | Later | Same calendar month compared across years. Months are already grouped by year |
 | Search and filter | Shipped | Text, category, date range, and amount range. Search does not rebuild the page, so the field keeps focus |
 | Dark mode | Shipped | Light, dark, or match the system |
-| Projections | Shipped | End-of-month pace, plus monthly and yearly estimates from recent finished months. Labeled as estimates |
+| Projections | Shipped | Own menu after Savings goals. End-of-month pace and yearly estimates for the selected month, labeled as estimates |
 
 ## Phase 3 — Plan spending and saving
 
