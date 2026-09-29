@@ -738,6 +738,9 @@
           const count = Array.isArray(data.t) ? data.t.length : 0;
           if (!confirm('Replace what is saved in this browser with this backup (' + count + ' transactions)?')) return;
           applyPayload(data);
+          S.q = '';
+          S.cat = '';
+          $('#q').value = '';
           applyTheme(S.theme);
           syncControls();
           save();
@@ -762,7 +765,10 @@
       S.rules = {};
       S.budgets = {};
       S.goals = [];
+      S.q = '';
+      S.cat = '';
       S.selectedMonth = '';
+      $('#q').value = '';
       planSig = '';
       undo = null;
       save();

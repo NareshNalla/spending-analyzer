@@ -21,7 +21,9 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 
 ## Screenshots
 
-![Dashboard with sample income, spending, and category bars](docs/screenshots/dashboard.png)
+![Dashboard with sample income, spending, budgets, and a savings goal](docs/screenshots/dashboard.png)
+
+![Monthly budgets and a savings goal](docs/screenshots/budgets.png)
 
 ![Dark theme](docs/screenshots/dark.png)
 
