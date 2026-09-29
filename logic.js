@@ -247,6 +247,96 @@
     return s.toLowerCase().replace(/(^|\s)([a-z])/g, (_, lead, ch) => lead + ch.toUpperCase());
   }
 
+  const PAYEE_STOP = new Set([
+    'ZELLE', 'UPI', 'PAYMENT', 'PAYMENTS', 'PAY', 'PAID', 'TO', 'FROM', 'THE', 'FOR', 'AND', 'OF',
+    'AT', 'WITH', 'A', 'AN', 'THIS', 'TRANSFER', 'TRANSFERRED', 'SENT', 'SEND', 'RECEIVED',
+    'PHONEPE', 'GPAY', 'GOOGLE', 'VENMO', 'PAYPAL', 'CASH', 'APP', 'NEFT', 'IMPS', 'ACH', 'PMT',
+    'ONLINE', 'REF', 'REFERENCE', 'CONFIRMATION', 'CONF', 'ID', 'TXN', 'TRANSACTION', 'RECHARGE',
+    'MEMO', 'NOTE', 'WWW', 'COM', 'OKAXIS', 'OKHDFCBANK', 'OKSBI', 'YBL', 'IBL', 'AXL', 'PAYTM', 'PTYES'
+  ]);
+
+  function payeeKey(desc) {
+    const text = String(desc || '')
+      .replace(/(\d)(?=[A-Za-z])/g, '$1 ')
+      .replace(/[\/_|]+/g, ' ');
+    const tokens = text.split(/[^A-Za-z0-9']+/).filter(Boolean);
+    const name = [];
+    for (const token of tokens) {
+      const upper = token.toUpperCase().replace(/'/g, '');
+      if (!upper) continue;
+      if (/\d/.test(upper) || upper.length < 2) {
+        if (name.length) break;
+        continue;
+      }
+      if (PAYEE_STOP.has(upper) || /^OK[A-Z]{2,}$/.test(upper)) {
+        if (name.length) break;
+        continue;
+      }
+      name.push(upper.toLowerCase());
+      if (name.length >= 3) break;
+    }
+    return name.join(' ');
+  }
+
+  function payeeLabel(desc) {
+    return payeeKey(desc).replace(/(^|\s)([a-z])/g, (_, lead, ch) => lead + ch.toUpperCase());
+  }
+
+  function amountCents(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Math.round(Math.abs(n) * 100);
+  }
+
+  function withinAmountBand(a, b) {
+    const left = amountCents(a);
+    const right = amountCents(b);
+    if (left == null || right == null) return false;
+    return Math.abs(left - right) <= 1000;
+  }
+
+  function normalizeSimilar(raw) {
+    if (!Array.isArray(raw)) return [];
+    const out = [];
+    raw.forEach(rule => {
+      const payee = payeeKey(rule && (rule.p || rule.payee)) || String(rule && (rule.p || rule.payee) || '').trim().toLowerCase();
+      const amount = round2(Math.abs(Number(rule && (rule.a != null ? rule.a : rule.amount))));
+      const category = canonicalCategory(rule && (rule.c || rule.category));
+      if (!payee || !category || !Number.isFinite(amount)) return;
+      const dup = out.findIndex(item => item.p === payee && withinAmountBand(item.a, amount));
+      const next = { p: payee, a: amount, c: category };
+      if (dup >= 0) out[dup] = next;
+      else out.push(next);
+    });
+    return out;
+  }
+
+  function upsertSimilar(rules, payee, amount, category) {
+    const known = canonicalCategory(category);
+    const key = payeeKey(payee) || String(payee || '').trim().toLowerCase();
+    const anchor = round2(Math.abs(Number(amount)));
+    if (!known || !key || !Number.isFinite(anchor)) return normalizeSimilar(rules);
+    return normalizeSimilar([...(rules || []).filter(rule => !(rule.p === key && withinAmountBand(rule.a, anchor))), { p: key, a: anchor, c: known }]);
+  }
+
+  function similarCategory(txn, rules) {
+    const payee = payeeKey(txn && txn.desc);
+    const amount = txn && txn.raw;
+    if (!payee || !Array.isArray(rules)) return null;
+    let best = null;
+    let bestDist = Infinity;
+    rules.forEach(rule => {
+      if (!rule || rule.p !== payee) return;
+      if (!withinAmountBand(amount, rule.a)) return;
+      const dist = Math.abs((amountCents(amount) || 0) - (amountCents(rule.a) || 0));
+      if (dist < bestDist) {
+        best = rule.c;
+        bestDist = dist;
+      }
+    });
+    return best;
+  }
+
   function autoCategory(desc) {
     const text = String(desc || '');
     for (const c of CATS) {
@@ -255,7 +345,7 @@
     return 'Other';
   }
 
-  function categoryOf(txn, rules) {
+  function categoryOf(txn, rules, similar) {
     const own = canonicalCategory(txn && txn.oc);
     if (own) return own;
     const key = txn && txn.m;
@@ -263,6 +353,8 @@
       const known = canonicalCategory(rules[key]);
       if (known) return known;
     }
+    const band = similarCategory(txn, similar);
+    if (band) return band;
     return autoCategory(txn && txn.desc);
   }
 
@@ -641,11 +733,11 @@
     return !!(t && categoryRole(t.c) === 'savings' && t.f < 0);
   }
 
-  function decorate(txns, modePref, rules) {
+  function decorate(txns, modePref, rules, similar) {
     const prepared = (txns || []).map(t => ({ ...t, m: t.m || merchant(t.desc || '') }));
     const mode = resolveMode(prepared, modePref, rules || {});
     const rows = prepared.map(t => {
-      const c = categoryOf(t, rules || {});
+      const c = categoryOf(t, rules || {}, similar);
       return { ...t, c, f: flow(t.raw, mode) };
     });
     return { mode, rows };
@@ -1017,7 +1109,8 @@
       sm: data.sm || '',
       v: data.v || 'tx',
       b: normalizeBudgets(data.b || data.budgets),
-      g: normalizeGoals(data.g || data.goals)
+      g: normalizeGoals(data.g || data.goals),
+      sr: normalizeSimilar(data.sr || data.similar)
     };
   }
 
@@ -1053,6 +1146,12 @@
     canonicalCategory,
     categoryRole,
     merchant,
+    payeeKey,
+    payeeLabel,
+    withinAmountBand,
+    normalizeSimilar,
+    upsertSimilar,
+    similarCategory,
     autoCategory,
     categoryOf,
     parseDate,

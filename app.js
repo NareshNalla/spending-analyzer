@@ -25,7 +25,8 @@
     selectedMonth: '',
     section: 'spend',
     budgets: {},
-    goals: []
+    goals: [],
+    similar: []
   };
 
   let chart = null;
@@ -66,7 +67,8 @@
       sec: S.section,
       v: S.view,
       b: S.budgets,
-      g: S.goals
+      g: S.goals,
+      sr: S.similar
     };
   }
 
@@ -96,6 +98,7 @@
     else if (['tx', 'mer', 'cat'].includes(d.v)) S.view = d.v;
     S.budgets = L.normalizeBudgets(d.b);
     S.goals = L.normalizeGoals(d.g);
+    S.similar = L.normalizeSimilar(d.sr);
     planSig = '';
     return migrated;
   }
@@ -190,7 +193,7 @@
 
   function currentView() {
     ensurePeriod();
-    const decorated = L.decorate(S.txns, S.mode, S.rules);
+    const decorated = L.decorate(S.txns, S.mode, S.rules, S.similar);
     const bounds = periodBounds();
     const inPeriod = bounds.from
       ? decorated.rows.filter(t => t.date >= bounds.from && t.date <= bounds.to)
@@ -518,7 +521,11 @@
       '<td class="merchant">' + esc(t.m) + '</td>' +
       '<td><div class="cat-cell"><span class="swatch" style="background:' + (COL[t.c] || '#475569') + '"></span>' +
         '<select data-id="' + esc(t.id) + '" aria-label="Category for this transaction">' + catOptions(t.c) + '</select>' +
-        '<label class="also"><input type="checkbox" data-also="' + esc(t.id) + '"> Also all ' + esc(t.m) + '</label></div></td>' +
+        '<label class="also"><input type="checkbox" data-also="' + esc(t.id) + '"> Also all ' + esc(t.m) + '</label>' +
+        (L.payeeLabel(t.desc)
+          ? '<label class="also"><input type="checkbox" data-similar="' + esc(t.id) + '"> Also similar payments to ' + esc(L.payeeLabel(t.desc)) + ' (amount within $10)</label>'
+          : '') +
+        '</div></td>' +
       '<td class="num ' + (t.f < 0 ? 'neg' : 'pos') + '">' + esc(fmt(t.f)) + '</td>' +
       '<td><button type="button" class="icon-btn" data-del="' + esc(t.id) + '" aria-label="Remove ' + esc(t.desc) + '">Remove</button></td>' +
       '</tr>'
@@ -867,14 +874,14 @@
     refresh();
   }
 
-  function applyCategory(sel, forceAll) {
+  function applyCategory(sel, source) {
     if (!sel) return;
     const txn = S.txns.find(t => t.id === sel.dataset.id);
     const value = L.canonicalCategory(sel.value);
     if (!txn || !value) return;
-    const box = sel.parentElement.querySelector('input[data-also]');
-    const all = forceAll || (box && box.checked);
-    if (all) {
+    const similarOn = !!(source && source.dataset && Object.prototype.hasOwnProperty.call(source.dataset, 'similar') && source.checked);
+    const allOn = !!(source && source.dataset && Object.prototype.hasOwnProperty.call(source.dataset, 'also') && source.checked);
+    if (allOn) {
       const merchant = txn.m;
       S.rules[merchant] = value;
       let count = 0;
@@ -884,7 +891,25 @@
         count += 1;
       });
       setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + merchant + '.', 'ok');
-    } else {
+    }
+    if (similarOn) {
+      const payee = L.payeeKey(txn.desc);
+      const amount = Math.abs(Number(txn.raw));
+      if (!payee || !Number.isFinite(amount)) {
+        txn.oc = value;
+        setMsg('Changed this transaction only. This row has no stable payee name.', 'warn');
+      } else {
+        S.similar = L.upsertSimilar(S.similar, payee, amount, value);
+        let count = 0;
+        S.txns.forEach(item => {
+          if (L.payeeKey(item.desc) !== payee || !L.withinAmountBand(item.raw, amount)) return;
+          delete item.oc;
+          count += 1;
+        });
+        setMsg('Set ' + value + ' on ' + count + ' similar payment' + (count === 1 ? '' : 's') + ' to ' + L.payeeLabel(txn.desc) + ' within $10. Later imports of that person in this amount band keep it.', 'ok');
+      }
+    }
+    if (!allOn && !similarOn) {
       txn.oc = value;
       setMsg('Changed this transaction only. Check “Also all ' + txn.m + '” to update the others.', 'ok');
     }
@@ -945,7 +970,7 @@
     });
     $('#clr').addEventListener('click', () => {
       const planned = Object.keys(S.budgets).length || S.goals.length;
-      if (!S.txns.length && !Object.keys(S.rules).length && !planned) {
+      if (!S.txns.length && !Object.keys(S.rules).length && !S.similar.length && !planned) {
         setMsg('There is nothing saved to clear.', 'warn');
         return;
       }
@@ -953,6 +978,7 @@
       if (!confirm('Remove all ' + n + ' saved transactions, category choices, budgets, and goals from this browser?')) return;
       S.txns = [];
       S.rules = {};
+      S.similar = [];
       S.budgets = {};
       S.goals = [];
       S.q = '';
@@ -1119,9 +1145,9 @@
       refresh();
     });
     $('#dashboard').addEventListener('change', e => {
-      const box = e.target.closest('input[data-also]');
+      const box = e.target.closest('input[data-also], input[data-similar]');
       if (box) {
-        applyCategory(box.closest('.cat-cell').querySelector('select[data-id]'), true);
+        applyCategory(box.closest('.cat-cell').querySelector('select[data-id]'), box);
         return;
       }
       const sel = e.target.closest('select[data-id]');
