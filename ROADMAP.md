@@ -16,7 +16,7 @@ Status values:
 | CSV import | Shipped | Headers or `date, description, amount`; debit/credit columns; running balance; quoted fields; BOM; `;` and tab; parentheses, CR/DR, trailing minus, European decimals |
 | Bank-statement PDF import | Shipped | Text PDFs only, with the local PDF.js copy. Scans are not read |
 | Categories | Shipped | Built-in list, grouped, including housing, utilities, household help, food, transport, family, education, health, loans, and savings. Older names still resolve |
-| Auto-categorization rules | Shipped | A category you set for one row stays on that row. Check “Also all {merchant}” to save a merchant rule. Existing merchant rules still load |
+| Auto-categorization rules | Shipped | Changing a category updates every row from that same merchant and is saved for later imports. A different merchant is left alone |
 | Income tracking | Shipped | Income, spending, net, and savings rate. Transfers are listed but left out of those totals |
 
 ## Phase 2 — See the picture
