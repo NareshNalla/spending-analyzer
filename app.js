@@ -209,7 +209,7 @@
       amtMin: S.amtMin,
       amtMax: S.amtMax
     });
-    return { mode: decorated.mode, all: inPeriod, filtered, summary: L.summarize(filtered) };
+    return { mode: decorated.mode, all: inPeriod, filtered, rows: decorated.rows, summary: L.summarize(filtered) };
   }
 
   function addTransactions(records, sourceName) {
@@ -559,6 +559,32 @@
       body + '</tbody></table></div>';
   }
 
+  function renderMonths(rows) {
+    const host = $('#monthTree');
+    if (!host) return;
+    const yearName = String(S.selectedMonth || '').slice(0, 4);
+    const years = L.monthsByYear(rows).filter(item => item.year === yearName);
+    if (!years.length) {
+      host.innerHTML = '<p class="panel-empty">No months in this year.</p>';
+      return;
+    }
+    host.innerHTML = years.map(year => {
+      const list = year.months.map(item => {
+        const active = item.month === S.selectedMonth ? ' active' : '';
+        const label = L.formatMonth(item.month, true).replace(/ \d{4}$/, '');
+        return '<button type="button" class="month-row' + active + '" data-month="' + item.month + '">' +
+          '<span>' + esc(label) + '</span>' +
+          '<span class="neg">Spend ' + esc(fmt(item.spend)) + '</span>' +
+          '<span class="pos">In ' + esc(fmt(item.income)) + '</span>' +
+          '<span>Saved ' + esc(fmt(item.savings)) + '</span>' +
+          '<strong>Net ' + esc(fmt(item.net)) + '</strong></button>';
+      }).join('');
+      return '<div class="year-block"><div class="year-head"><span>' + esc(year.year) + '</span>' +
+        '<span>Spend ' + esc(fmt(year.spend)) + '</span><span>Saved ' + esc(fmt(year.savings)) +
+        '</span><span>Net ' + esc(fmt(year.net)) + '</span></div><div class="month-list">' + list + '</div></div>';
+    }).join('');
+  }
+
   function projectionNote(report) {
     if (report.finished) {
       return 'Estimates from ' + report.currentLabel + ' only. That month is finished, so the month figures are the actual totals. Yearly figures repeat this month twelve times.';
@@ -665,7 +691,10 @@
     const bar = $('#periodBar');
     const months = periodMonths();
     if (!months.length) {
-      bar.hidden = true;
+      bar.hidden = false;
+      $('#periodYear').innerHTML = '<option value="">—</option>';
+      $('#periodMonth').innerHTML = '<option value="">—</option>';
+      $('#periodHint').textContent = 'Add a transaction to choose a year and month.';
       return;
     }
     ensurePeriod();
@@ -686,7 +715,7 @@
         return '<option value="' + month + '"' + (month === S.selectedMonth ? ' selected' : '') + '>' + esc(label) + '</option>';
       }).join('');
     }
-    $('#periodHint').textContent = 'Everything below is ' + L.formatMonth(S.selectedMonth, true) + ' only.';
+    $('#periodHint').textContent = 'Totals, categories, transactions, projections, budgets, and savings use ' + L.formatMonth(S.selectedMonth, true) + ' only.';
   }
 
   function chooseYear(year) {
@@ -710,8 +739,9 @@
       const planned = Object.keys(S.budgets).length || S.goals.length;
       empty.hidden = !!planned;
       dashboard.hidden = !planned;
-      $('#periodBar').hidden = true;
+      if (!planned) $('#periodBar').hidden = true;
       if (planned) {
+        renderPeriodBar();
         renderPlan([]);
         syncTabs();
         $('#stats').innerHTML = '';
@@ -733,6 +763,7 @@
     renderPeriodBar();
     alignDatesToPeriod();
     const view = currentView();
+    renderMonths(view.rows);
     const monthSummary = L.summarize(view.all);
     const summary = view.summary;
     const periodName = L.formatMonth(S.selectedMonth, true);
@@ -1070,6 +1101,14 @@
     $('#dashboard').addEventListener('click', e => {
       const del = e.target.closest('[data-del]');
       if (del) { removeTxn(del.dataset.del); return; }
+      const month = e.target.closest('[data-month]');
+      if (month && month.dataset.month !== S.selectedMonth) {
+        S.selectedMonth = month.dataset.month;
+        planSig = '';
+        save();
+        refresh();
+        return;
+      }
       const th = e.target.closest('th[data-sort]');
       if (!th || !th.closest('#panel, #monthDetail')) return;
       const key = th.dataset.sort;
