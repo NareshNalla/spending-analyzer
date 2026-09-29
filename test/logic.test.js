@@ -293,3 +293,110 @@ test('export round-trips displayed amounts and escapes commas', () => {
 test('storage key stays spend_v3', () => {
   assert.equal(L.STORAGE_KEY, 'spend_v3');
 });
+
+test('budgets keep known spending categories and positive limits', () => {
+  const budgets = L.normalizeBudgets({
+    groceries: '400.126',
+    Income: 1000,
+    Transfers: 50,
+    Housing: 0,
+    Dining: -5,
+    Nope: 20,
+    Shopping: 150
+  });
+  assert.deepEqual(budgets, { Groceries: 400.13, Shopping: 150 });
+});
+
+test('goals drop blanks and keep a deadline when it is a real date', () => {
+  const goals = L.normalizeGoals([
+    { id: 'g1', name: '  Emergency fund  ', target: 1000, saved: 250, deadline: '2026-12-01' },
+    { name: '', target: 10, saved: 0 },
+    { name: 'Trip', target: 0, saved: 5 },
+    { name: 'Car', target: 800, saved: -3, deadline: 'not-a-date' }
+  ]);
+  assert.equal(goals.length, 2);
+  assert.equal(goals[0].id, 'g1');
+  assert.equal(goals[0].name, 'Emergency fund');
+  assert.equal(goals[0].saved, 250);
+  assert.equal(goals[0].deadline, '2026-12-01');
+  assert.equal(goals[1].name, 'Car');
+  assert.equal(goals[1].saved, 0);
+  assert.equal(goals[1].deadline, '');
+  const progress = L.goalProgress(goals[0]);
+  assert.equal(progress.ratio, 0.25);
+  assert.equal(progress.left, 750);
+  assert.equal(progress.done, false);
+});
+
+test('plan report uses the latest month unless the date filter is a single month', () => {
+  const { rows } = L.decorate(L.SAMPLE_TXNS, 'bank', {});
+  const latest = L.planReport(rows, { Groceries: 80, Housing: 1450, Dining: 20 }, [], {});
+  assert.equal(latest.month, '2026-03');
+  const groceries = latest.statuses.find(item => item.name === 'Groceries');
+  assert.equal(groceries.spent, 71.55);
+  assert.equal(groceries.level, 'near');
+  const housing = latest.statuses.find(item => item.name === 'Housing');
+  assert.equal(housing.spent, 1450);
+  assert.equal(housing.level, 'ok');
+  const dining = latest.statuses.find(item => item.name === 'Dining');
+  assert.equal(dining.spent, 32.1);
+  assert.equal(dining.level, 'over');
+  assert.deepEqual(latest.alerts.map(item => item.name), ['Dining', 'Groceries']);
+
+  const january = L.planReport(rows, { Groceries: 50 }, [], {
+    dateFrom: '2026-01-01',
+    dateTo: '2026-01-31'
+  });
+  assert.equal(january.month, '2026-01');
+  assert.equal(january.statuses[0].spent, 86.42);
+  assert.equal(january.statuses[0].level, 'over');
+
+  const empty = L.planReport([], { Groceries: 50 }, [], {});
+  assert.equal(empty.month, '');
+  assert.equal(empty.statuses[0].spent, 0);
+  assert.equal(empty.statuses[0].level, 'ok');
+});
+
+test('JSON backup round-trips and also accepts a raw spend_v3 object', () => {
+  const state = {
+    t: [{ date: '2026-01-05', desc: 'KROGER', raw: -10 }],
+    r: { Kroger: 'Groceries' },
+    m: 'bank',
+    b: { Groceries: 200, Income: 999 },
+    g: [{ name: 'Trip', target: 500, saved: 20 }]
+  };
+  const backup = L.buildBackup(state);
+  assert.equal(backup.version, 1);
+  assert.equal(backup.app, 'spending-analyzer');
+  assert.equal(typeof backup.exportedAt, 'string');
+  const restored = L.parseBackup(JSON.stringify(backup));
+  assert.equal(restored.t.length, 1);
+  assert.equal(restored.t[0].desc, 'KROGER');
+  assert.deepEqual(restored.b, { Groceries: 200 });
+  assert.equal(restored.g[0].name, 'Trip');
+  assert.equal(restored.g[0].saved, 20);
+  assert.equal(restored.g[0].target, 500);
+  assert.ok(restored.g[0].id);
+
+  const raw = L.parseBackup(JSON.stringify({
+    t: state.t,
+    r: { Kroger: 'Groceries' },
+    m: 'card',
+    amx: 999999,
+    th: 'dark'
+  }));
+  assert.equal(raw.m, 'card');
+  assert.equal(raw.amx, 999999);
+  assert.equal(raw.th, 'dark');
+  assert.deepEqual(raw.b, {});
+  assert.deepEqual(raw.g, []);
+
+  const goalsOnly = L.parseBackup(JSON.stringify({
+    goals: [{ name: 'Fund', target: 10, saved: 1 }]
+  }));
+  assert.equal(goalsOnly.t.length, 0);
+  assert.equal(goalsOnly.g[0].name, 'Fund');
+
+  assert.throws(() => L.parseBackup('not json'), /valid JSON/);
+  assert.throws(() => L.parseBackup('{"hello":1}'), /does not look like/);
+});

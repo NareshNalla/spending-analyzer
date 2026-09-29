@@ -36,6 +36,9 @@
           <option value="card">Card: charges positive</option>
         </select>
         <button type="button" class="primary" id="exp">Export CSV</button>
+        <button type="button" id="backup">Backup JSON</button>
+        <button type="button" id="restoreBtn">Restore JSON</button>
+        <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
         <button type="button" class="danger quiet" id="clr">Clear data</button>
       </div>
     </header>
@@ -62,6 +65,33 @@
       <p class="meta" id="modeHint"></p>
       <div class="stats" id="stats"></div>
       <div class="insights" id="insights"></div>
+
+      <section class="split" id="plan" aria-label="Budgets and savings goals">
+        <section class="card">
+          <h3>Monthly budgets</h3>
+          <p class="detail" id="budgetMonth">Set a monthly limit for a spending category.</p>
+          <div id="budgetAlerts" role="status"></div>
+          <div id="budgetList"></div>
+          <form class="plan-form" id="budgetForm">
+            <label>Category <select name="category" id="budgetCategory"></select></label>
+            <label>Limit <input name="limit" type="number" min="0.01" step="0.01" required placeholder="400"></label>
+            <button type="submit" class="primary">Save budget</button>
+          </form>
+        </section>
+        <section class="card">
+          <h3>Savings goals</h3>
+          <p class="detail">Record money you have set aside. This is your own tally, not a bank balance.</p>
+          <div id="goalList"></div>
+          <form class="plan-form goal-form" id="goalForm">
+            <label>Name <input name="name" required maxlength="80" placeholder="Emergency fund" autocomplete="off"></label>
+            <label>Target <input name="target" type="number" min="0.01" step="0.01" required></label>
+            <label>Saved <input name="saved" type="number" min="0" step="0.01" value="0"></label>
+            <label>Deadline <input name="deadline" type="date"></label>
+            <button type="submit" class="primary">Add goal</button>
+          </form>
+        </section>
+        <p class="error" id="planError" role="status"></p>
+      </section>
 
       <div class="filters">
         <div class="filter-grid">
@@ -130,7 +160,7 @@
     </section>
 
     <footer class="footer">
-      Transactions stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload.
+      Transactions, budgets, and goals stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON if you want a copy you can restore later.
     </footer>
   </div>
 

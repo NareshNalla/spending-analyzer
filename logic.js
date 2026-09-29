@@ -7,9 +7,10 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  // localStorage key and payload fields (t, r, m, f, to, amn, amx, th, sm) are
-  // part of the on-disk format. New optional field: v (active tab).
+  // localStorage key spend_v3. Existing fields stay: t, r, m, f, to, amn, amx, th, sm.
+  // Optional additions: v (tab), b (category budgets), g (savings goals).
   const STORAGE_KEY = 'spend_v3';
+  const BACKUP_VERSION = 1;
 
   const CATS = [
     ['Income', '#16a34a', /payroll|direct deposit|direct dep|salary|paycheck|\bbonus\b|dividend|\brefund\b|reversal|interest paid/i, '💰'],
@@ -635,6 +636,127 @@
     return lines.join('\n');
   }
 
+  function spendCategoryNames() {
+    return CATS.map(c => c[0]).filter(name => name !== 'Income' && name !== 'Transfers');
+  }
+
+  function normalizeBudgets(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object') return out;
+    Object.keys(raw).forEach(key => {
+      const name = canonicalCategory(key);
+      const amount = Number(raw[key]);
+      if (!name || name === 'Income' || name === 'Transfers') return;
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      out[name] = round2(amount);
+    });
+    return out;
+  }
+
+  function normalizeGoals(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(goal => {
+      const name = String(goal && goal.name || '').trim().slice(0, 80);
+      const target = round2(Number(goal && goal.target));
+      const saved = round2(Number(goal && goal.saved));
+      if (!name || !Number.isFinite(target) || target <= 0) return null;
+      const deadline = goal && goal.deadline ? parseDate(goal.deadline, new Date().getFullYear()) : '';
+      return {
+        id: String(goal.id || uid()),
+        name,
+        target,
+        saved: Number.isFinite(saved) && saved > 0 ? saved : 0,
+        deadline: deadline || ''
+      };
+    }).filter(Boolean);
+  }
+
+  function goalProgress(goal) {
+    const saved = goal.saved || 0;
+    const ratio = goal.target ? saved / goal.target : 0;
+    return {
+      ...goal,
+      ratio,
+      left: round2(Math.max(0, goal.target - saved)),
+      done: saved >= goal.target
+    };
+  }
+
+  function budgetMonth(rows, range) {
+    const months = summarizeMonths(rows);
+    const from = range && range.dateFrom;
+    const to = range && range.dateTo;
+    if (from && to && from.slice(0, 7) === to.slice(0, 7) && /^\d{4}-\d{2}/.test(from)) {
+      return from.slice(0, 7);
+    }
+    return months.length ? months[months.length - 1].month : '';
+  }
+
+  function planReport(rows, budgets, goals, range) {
+    const month = budgetMonth(rows, range);
+    const spent = {};
+    (rows || []).filter(t => month && String(t.date).startsWith(month) && isSpend(t)).forEach(t => {
+      spent[t.c] = round2((spent[t.c] || 0) + (-t.f));
+    });
+    const limits = normalizeBudgets(budgets);
+    const statuses = Object.keys(limits).map(name => {
+      const limit = limits[name];
+      const amount = round2(spent[name] || 0);
+      const ratio = limit ? amount / limit : 0;
+      let level = 'ok';
+      if (amount > limit) level = 'over';
+      else if (amount < limit && ratio >= 0.8) level = 'near';
+      return { name, limit, spent: amount, left: round2(limit - amount), ratio, level };
+    }).sort((a, b) => b.ratio - a.ratio);
+    return {
+      month,
+      monthLabel: month ? formatMonth(month, true) : '',
+      statuses,
+      alerts: statuses.filter(item => item.level !== 'ok'),
+      goals: normalizeGoals(goals).map(goalProgress)
+    };
+  }
+
+  function buildBackup(state) {
+    return {
+      version: BACKUP_VERSION,
+      app: 'spending-analyzer',
+      exportedAt: new Date().toISOString(),
+      data: state || {}
+    };
+  }
+
+  function parseBackup(text) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      throw new Error('That file is not valid JSON.');
+    }
+    if (!parsed || typeof parsed !== 'object') throw new Error('That file is not a backup.');
+    const wrapped = parsed.data && typeof parsed.data === 'object' && (parsed.app === 'spending-analyzer' || parsed.version);
+    const data = wrapped ? parsed.data : parsed;
+    const txns = data.t || data.txns || data.transactions;
+    const hasPlans = data.b || data.budgets || data.g || data.goals;
+    if (!Array.isArray(txns) && !hasPlans) {
+      throw new Error('That file does not look like a Spending Analyzer backup.');
+    }
+    return {
+      t: Array.isArray(txns) ? txns : [],
+      r: data.r || data.rules || {},
+      m: data.m || data.mode || 'auto',
+      f: data.f || '',
+      to: data.to || '',
+      amn: data.amn,
+      amx: data.amx,
+      th: data.th || data.theme || 'auto',
+      sm: data.sm || '',
+      v: data.v || 'tx',
+      b: normalizeBudgets(data.b || data.budgets),
+      g: normalizeGoals(data.g || data.goals)
+    };
+  }
+
   function migrate(txns, rules) {
     const nextRules = { ...(rules || {}) };
     const nextTxns = (txns || []).map(t => {
@@ -678,6 +800,14 @@
     summarize,
     summarizeMonths,
     exportCsv,
-    migrate
+    migrate,
+    BACKUP_VERSION,
+    spendCategoryNames,
+    normalizeBudgets,
+    normalizeGoals,
+    goalProgress,
+    planReport,
+    buildBackup,
+    parseBackup
   };
 });

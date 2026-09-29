@@ -22,7 +22,9 @@
     amtMin: 0,
     amtMax: null,
     theme: 'auto',
-    selectedMonth: ''
+    selectedMonth: '',
+    budgets: {},
+    goals: []
   };
 
   let chart = null;
@@ -31,6 +33,7 @@
   let pdfPromise = null;
   let toastTimer = null;
   let undo = null;
+  let planSig = '';
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -48,20 +51,26 @@
     el.className = 'msg' + (kind ? ' ' + kind : '');
   }
 
+  function snapshot() {
+    return {
+      t: S.txns,
+      r: S.rules,
+      m: S.mode,
+      f: S.dateFrom,
+      to: S.dateTo,
+      amn: S.amtMin,
+      amx: S.amtMax,
+      th: S.theme,
+      sm: S.selectedMonth,
+      v: S.view,
+      b: S.budgets,
+      g: S.goals
+    };
+  }
+
   function save() {
     try {
-      localStorage.setItem(L.STORAGE_KEY, JSON.stringify({
-        t: S.txns,
-        r: S.rules,
-        m: S.mode,
-        f: S.dateFrom,
-        to: S.dateTo,
-        amn: S.amtMin,
-        amx: S.amtMax,
-        th: S.theme,
-        sm: S.selectedMonth,
-        v: S.view
-      }));
+      localStorage.setItem(L.STORAGE_KEY, JSON.stringify(snapshot()));
       return true;
     } catch (e) {
       setMsg('This browser blocked local storage, so changes will disappear when you close the tab.', 'warn');
@@ -69,10 +78,7 @@
     }
   }
 
-  function load() {
-    let d = null;
-    try { d = JSON.parse(localStorage.getItem(L.STORAGE_KEY) || 'null'); } catch (e) { d = null; }
-    if (!d) return;
+  function applyPayload(d) {
     const migrated = L.migrate(d.t || [], d.r || {});
     S.txns = migrated.txns;
     S.rules = migrated.rules;
@@ -84,6 +90,28 @@
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
     if (['tx', 'mer', 'cat', 'month'].includes(d.v)) S.view = d.v;
+    S.budgets = L.normalizeBudgets(d.b);
+    S.goals = L.normalizeGoals(d.g);
+    planSig = '';
+    return migrated;
+  }
+
+  function syncControls() {
+    $('#mode').value = S.mode;
+    $('#theme').value = S.theme;
+    $('#dateFrom').value = S.dateFrom;
+    $('#dateTo').value = S.dateTo;
+    $('#amtMin').value = S.amtMin ? String(S.amtMin) : '';
+    $('#amtMax').value = S.amtMax == null ? '' : String(S.amtMax);
+    const cat = $('#catFilter');
+    if (cat && document.activeElement !== cat) cat.value = S.cat;
+  }
+
+  function load() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(L.STORAGE_KEY) || 'null'); } catch (e) { d = null; }
+    if (!d) return;
+    applyPayload(d);
     const merchantsChanged = (d.t || []).some((t, i) => !t.id || t.m !== S.txns[i].m);
     const rulesChanged = JSON.stringify(d.r || {}) !== JSON.stringify(S.rules);
     const storedMax = d.amx == null || d.amx === '' ? null : Number(d.amx);
@@ -499,6 +527,50 @@
     else panel.innerHTML = txnTable(rows);
   }
 
+  function meter(ratio, level, label) {
+    const width = Math.max(0, Math.min(ratio, 1)) * 100;
+    const now = Math.round(Math.min(Math.max(ratio, 0), 1) * 100);
+    return '<div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + now + '" aria-label="' + esc(label) + '">' +
+      '<span class="fill ' + level + '" style="width:' + width + '%"></span></div>';
+  }
+
+  function renderPlan(rows) {
+    const report = L.planReport(rows, S.budgets, S.goals, { dateFrom: S.dateFrom, dateTo: S.dateTo });
+    const sig = JSON.stringify(report);
+    if (sig === planSig) return;
+    planSig = sig;
+    const monthLine = report.monthLabel
+      ? 'Compared with spending in ' + report.monthLabel + '. A category turns amber at 80% and red after it passes the limit.'
+      : 'Budgets will compare against a month once there are transactions.';
+    $('#budgetMonth').textContent = monthLine;
+    const alerts = $('#budgetAlerts');
+    alerts.innerHTML = report.alerts.map(item => {
+      const text = item.level === 'over'
+        ? item.name + ' is over budget by ' + fmt(Math.abs(item.left)) + '.'
+        : item.name + ' is at ' + Math.round(item.ratio * 100) + '% of its ' + fmt(item.limit) + ' budget.';
+      return '<p class="alert ' + item.level + '">' + esc(text) + '</p>';
+    }).join('');
+    const list = $('#budgetList');
+    list.innerHTML = report.statuses.length ? report.statuses.map(item =>
+      '<div class="plan-row"><div class="plan-head"><span>' + esc((MARK[item.name] || '') + ' ' + item.name) + '</span>' +
+      '<span>' + esc(fmt(item.spent)) + ' of ' + esc(fmt(item.limit)) + '</span></div>' +
+      meter(item.ratio, item.level, item.name + ' budget') +
+      '<div class="plan-actions"><span class="detail">' + (item.level === 'over' ? 'Over by ' + fmt(Math.abs(item.left)) : fmt(Math.max(item.left, 0)) + ' left') + '</span>' +
+      '<button type="button" class="icon-btn" data-remove-budget="' + esc(item.name) + '">Remove</button></div></div>'
+    ).join('') : '<p class="detail">No budgets yet.</p>';
+    const goals = $('#goalList');
+    goals.innerHTML = report.goals.length ? report.goals.map(goal =>
+      '<div class="plan-row"><div class="plan-head"><span>' + esc(goal.name) +
+      (goal.deadline ? ' · due ' + esc(goal.deadline) : '') + (goal.done ? ' · reached' : '') + '</span>' +
+      '<span>' + esc(fmt(goal.saved)) + ' of ' + esc(fmt(goal.target)) + '</span></div>' +
+      meter(goal.ratio, goal.done ? 'ok' : 'near', goal.name + ' goal') +
+      '<form class="contrib" data-goal="' + esc(goal.id) + '">' +
+      '<label>Add <input name="amount" type="number" min="0.01" step="0.01" aria-label="Add to ' + esc(goal.name) + '"></label>' +
+      '<button type="submit">Add</button>' +
+      '<button type="button" class="icon-btn" data-remove-goal="' + esc(goal.id) + '">Remove</button></form></div>'
+    ).join('') : '<p class="detail">No savings goals yet.</p>';
+  }
+
   function syncTabs() {
     document.querySelectorAll('.tab').forEach(tab => {
       const on = tab.dataset.view === S.view;
@@ -511,8 +583,19 @@
     const empty = $('#empty');
     const dashboard = $('#dashboard');
     if (!S.txns.length) {
-      empty.hidden = false;
-      dashboard.hidden = true;
+      const planned = Object.keys(S.budgets).length || S.goals.length;
+      empty.hidden = !!planned;
+      dashboard.hidden = !planned;
+      if (planned) {
+        renderPlan([]);
+        $('#stats').innerHTML = '';
+        $('#insights').innerHTML = '';
+        $('#catBars').innerHTML = '';
+        $('#recur').innerHTML = '';
+        $('#panel').innerHTML = '<p class="panel-empty">Add a transaction to compare these plans with real spending.</p>';
+        $('#resultMeta').textContent = '';
+        $('#modeHint').textContent = '';
+      }
       chartSeq++;
       if (chart) { chart.destroy(); chart = null; }
       return;
@@ -527,6 +610,7 @@
     $('#addHint').textContent = 'Saved with the current ' + view.mode + ' amount style, so the sign matches the other rows.';
     renderStats(summary);
     renderInsights(summary);
+    renderPlan(view.all);
     renderCategories(summary.categories, summary.totalSpend);
     renderRecurring(summary.recurring);
     const warn = $('#filterWarn');
@@ -634,19 +718,117 @@
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     });
+    $('#backup').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(L.buildBackup(snapshot()), null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'spending-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    $('#restoreBtn').addEventListener('click', () => $('#restoreFile').click());
+    $('#restoreFile').addEventListener('change', () => {
+      const file = $('#restoreFile').files[0];
+      $('#restoreFile').value = '';
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = L.parseBackup(String(reader.result || ''));
+          const count = Array.isArray(data.t) ? data.t.length : 0;
+          if (!confirm('Replace what is saved in this browser with this backup (' + count + ' transactions)?')) return;
+          applyPayload(data);
+          applyTheme(S.theme);
+          syncControls();
+          save();
+          setMsg('Restored ' + count + ' transactions from ' + file.name + '.', 'ok');
+          refresh();
+        } catch (e) {
+          setMsg(e.message || 'Could not restore that file.', 'err');
+        }
+      };
+      reader.onerror = () => setMsg('Could not read ' + file.name + '.', 'err');
+      reader.readAsText(file);
+    });
     $('#clr').addEventListener('click', () => {
-      if (!S.txns.length && !Object.keys(S.rules).length) {
+      const planned = Object.keys(S.budgets).length || S.goals.length;
+      if (!S.txns.length && !Object.keys(S.rules).length && !planned) {
         setMsg('There is nothing saved to clear.', 'warn');
         return;
       }
       const n = S.txns.length;
-      if (!confirm('Remove all ' + n + ' saved transactions and category choices from this browser?')) return;
+      if (!confirm('Remove all ' + n + ' saved transactions, category choices, budgets, and goals from this browser?')) return;
       S.txns = [];
       S.rules = {};
+      S.budgets = {};
+      S.goals = [];
       S.selectedMonth = '';
+      planSig = '';
       undo = null;
       save();
-      setMsg('Removed saved transactions from this browser.', 'ok');
+      setMsg('Removed saved transactions, budgets, and goals from this browser.', 'ok');
+      refresh();
+    });
+    $('#budgetForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      const name = L.canonicalCategory(data.get('category'));
+      const limit = Number(data.get('limit'));
+      const err = $('#planError');
+      if (!name) { err.textContent = 'Choose a spending category.'; return; }
+      if (!Number.isFinite(limit) || limit <= 0) { err.textContent = 'Enter a budget greater than zero.'; return; }
+      S.budgets[name] = L.round2(limit);
+      err.textContent = '';
+      e.target.elements.limit.value = '';
+      planSig = '';
+      save();
+      refresh();
+    });
+    $('#goalForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      const name = String(data.get('name') || '').trim();
+      const target = Number(data.get('target'));
+      const saved = Number(data.get('saved') || 0);
+      const deadline = L.parseDate(String(data.get('deadline') || ''), new Date().getFullYear()) || '';
+      const err = $('#planError');
+      if (name.length < 2) { err.textContent = 'Name the goal.'; return; }
+      if (!Number.isFinite(target) || target <= 0) { err.textContent = 'Enter a target greater than zero.'; return; }
+      if (String(data.get('deadline') || '') && !deadline) { err.textContent = 'Use a real deadline, or leave it blank.'; return; }
+      S.goals.push({ id: L.uid(), name, target: L.round2(target), saved: Number.isFinite(saved) && saved > 0 ? L.round2(saved) : 0, deadline });
+      err.textContent = '';
+      e.target.reset();
+      planSig = '';
+      save();
+      refresh();
+    });
+    $('#plan').addEventListener('click', e => {
+      const budget = e.target.closest('[data-remove-budget]');
+      if (budget) {
+        delete S.budgets[budget.dataset.removeBudget];
+        planSig = '';
+        save();
+        refresh();
+        return;
+      }
+      const goal = e.target.closest('[data-remove-goal]');
+      if (goal) {
+        S.goals = S.goals.filter(item => item.id !== goal.dataset.removeGoal);
+        planSig = '';
+        save();
+        refresh();
+      }
+    });
+    $('#plan').addEventListener('submit', e => {
+      const form = e.target.closest('form.contrib');
+      if (!form) return;
+      e.preventDefault();
+      const amount = Number(new FormData(form).get('amount'));
+      const goal = S.goals.find(item => item.id === form.dataset.goal);
+      if (!goal || !Number.isFinite(amount) || amount <= 0) return;
+      goal.saved = L.round2(goal.saved + amount);
+      planSig = '';
+      save();
       refresh();
     });
 
@@ -765,13 +947,13 @@
   function init() {
     load();
     applyTheme(S.theme);
-    $('#mode').value = S.mode;
-    $('#dateFrom').value = S.dateFrom;
-    $('#dateTo').value = S.dateTo;
-    $('#amtMin').value = S.amtMin ? String(S.amtMin) : '';
-    $('#amtMax').value = S.amtMax == null ? '' : String(S.amtMax);
+    syncControls();
     const cat = $('#catFilter');
     cat.innerHTML = '<option value="">All categories</option>' + catOptions('');
+    const budgetCat = $('#budgetCategory');
+    budgetCat.innerHTML = L.spendCategoryNames().map(name =>
+      '<option value="' + esc(name) + '">' + esc((MARK[name] || '') + ' ' + name) + '</option>'
+    ).join('');
     bind();
     refresh();
   }
