@@ -47,7 +47,7 @@ Status values:
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Repeating merchants | Shipped | Merchants with purchases in two or more months of the current view |
+| Repeating merchants | Shipped in logic | The page is scoped to one month, so the repeating-merchant card stays hidden |
 | Subscription detection | Later | Cadence, price changes, and a “this looks like a subscription” flag beyond the merchant list |
 | Recurring expense calendar | Later | Expected next date for rent, bills, and subscriptions |
 | Refunds against a budget | Later | A category budget currently counts money out. A refund in that category does not lower the spent amount |

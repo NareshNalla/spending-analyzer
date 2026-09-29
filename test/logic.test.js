@@ -465,4 +465,13 @@ test('months group by year and projections are labeled from pace', () => {
   assert.deepEqual(report.basedOn, ['2026-06', '2026-07', '2026-08']);
   assert.equal(report.projectedYearSpend, L.round2(report.averageMonthSpend * 12));
   assert.ok(report.averageMonthSavings > 0);
+  assert.equal(L.defaultPeriod(['2026-01', '2026-09', '2025-12'], new Date(2026, 8, 29)), '2026-09');
+  assert.equal(L.defaultPeriod(['2025-10', '2026-03'], new Date(2026, 8, 29)), '2026-03');
+  const march = L.projections(rows, new Date(2026, 8, 29), '2026-03');
+  assert.equal(march.scoped, true);
+  assert.equal(march.finished, true);
+  assert.equal(march.currentMonth, '2026-03');
+  assert.equal(march.basedOn.length, 1);
+  assert.notEqual(march.spentSoFar, september.spend);
+  assert.equal(march.projectedYearSpend, L.round2(march.spentSoFar * 12));
 });
