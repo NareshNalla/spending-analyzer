@@ -9,7 +9,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
 endobj
 4 0 obj
-<< /Length 294 >>
+<< /Length 295 >>
 stream
 BT
 /F1 11 Tf
@@ -19,7 +19,7 @@ BT
 T* (01/05/2026 PAYROLL ACME CORP 3,200.00 5,200.00) Tj
 T* (01/06/2026 KROGER #123 -86.42 5,113.58) Tj
 T* (01/15/2026 RENT PAYMENT -1,450.00 3,663.58) Tj
-T* (01/20/2026 TOTAL WINE 40.00 3,623.58) Tj
+T* (01/20/2026 TOTAL WINE -40.00 3,623.58) Tj
 T* (Total purchases 1,576.42) Tj
 ET
 endstream
@@ -34,8 +34,8 @@ xref
 0000000058 00000 n 
 0000000115 00000 n 
 0000000241 00000 n 
-0000000586 00000 n 
+0000000587 00000 n 
 trailer << /Size 6 /Root 1 0 R >>
 startxref
-656
+657
 %%EOF

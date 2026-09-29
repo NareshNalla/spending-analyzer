@@ -51,6 +51,8 @@ body {
   width: min(1180px, calc(100% - 28px));
   margin: 0 auto;
   padding: 22px 0 48px;
+  min-width: 0;
+  overflow-x: clip;
 }
 
 h1, h2, h3, p { margin: 0; }
@@ -263,11 +265,11 @@ input[type="search"] { width: 100%; }
 details.card summary { cursor: pointer; font-weight: 700; }
 details.card summary::marker { color: var(--ac); }
 
-.table-wrap { overflow-x: auto; margin-top: 8px; }
+.table-wrap { overflow-x: auto; margin-top: 8px; max-width: 100%; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { padding: 9px 10px; border-bottom: 1px solid var(--bd); text-align: left; vertical-align: top; }
 th { color: var(--mut); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
-td.desc { min-width: 180px; white-space: normal; }
+  td.desc { min-width: 0; white-space: normal; }
 td.num, th.num { text-align: right; white-space: nowrap; }
 tr:hover td { background: color-mix(in srgb, var(--ac-soft) 65%, transparent); }
 .cat-cell { display: flex; align-items: center; gap: 8px; }
@@ -325,6 +327,8 @@ tr:hover td { background: color-mix(in srgb, var(--ac-soft) 65%, transparent); }
   .track, .bar-pct { display: none; }
   .drop { padding: 16px 12px; }
   .chart-box { height: 220px; }
+  th.merchant, td.merchant { display: none; }
+  .cat-cell select { max-width: 8.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

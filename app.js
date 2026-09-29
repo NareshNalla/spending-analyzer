@@ -404,13 +404,14 @@
     const head = headers.map(([key, label]) => {
       const arrow = S.sk === key ? (S.sd > 0 ? ' ▲' : ' ▼') : '';
       const sort = S.sk === key ? (S.sd > 0 ? 'ascending' : 'descending') : 'none';
-      return '<th data-sort="' + key + '" aria-sort="' + sort + '"' + (key === 'f' ? ' class="num"' : '') + '>' + label + arrow + '</th>';
+      const cls = [key === 'f' ? 'num' : '', key === 'm' ? 'merchant' : ''].filter(Boolean).join(' ');
+      return '<th data-sort="' + key + '" aria-sort="' + sort + '"' + (cls ? ' class="' + cls + '"' : '') + '>' + label + arrow + '</th>';
     }).join('') + '<th aria-label="Remove"></th>';
     const body = sorted.map(t =>
       '<tr>' +
       '<td>' + esc(t.date) + '</td>' +
       '<td class="desc" title="' + esc(t.file || '') + '">' + esc(t.desc) + '</td>' +
-      '<td>' + esc(t.m) + '</td>' +
+      '<td class="merchant">' + esc(t.m) + '</td>' +
       '<td><div class="cat-cell"><span class="swatch" style="background:' + COL[t.c] + '"></span>' +
         '<select data-rule="' + esc(t.m) + '" aria-label="Category for ' + esc(t.m) + '">' + catOptions(t.c) + '</select></div></td>' +
       '<td class="num ' + (t.f < 0 ? 'neg' : 'pos') + '">' + esc(fmt(t.f)) + '</td>' +
