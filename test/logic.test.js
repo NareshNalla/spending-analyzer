@@ -431,7 +431,8 @@ test('savings and credit-card bills are not spending', () => {
   assert.equal(L.autoCategory('BIRTHDAY GIFT'), 'Gift');
   assert.equal(L.autoCategory('SHAGUN FOR NIECE'), 'Gift');
   assert.equal(L.autoCategory('GIFT SHOP'), 'Gift');
-  assert.equal(L.autoCategory('DIWALI POOJA'), 'Festivals & Pooja');
+  assert.equal(L.autoCategory('DIWALI POOJA'), 'Pooja');
+  assert.equal(L.autoCategory('NAVRATRI'), 'Festivals & Pooja');
   assert.equal(L.autoCategory('AMAZON MARKETPLACE'), 'Shopping');
   assert.ok(L.categories().some(c => c.name === 'Gifts' && c.group === 'Family & religious'));
   assert.ok(L.categories().some(c => c.name === 'Gift' && c.group === 'Family & religious'));
@@ -510,6 +511,40 @@ test('parking stays under transport and does not take other tolls', () => {
   assert.equal(rows.find(t => t.desc === 'CITY PARKING').c, 'Parking');
   assert.equal(L.isSpend(rows.find(t => t.desc === 'CITY PARKING')), true);
   assert.equal(summary.totalSpend, 32);
+});
+
+test('pooja, devotional, and festival are separate categories', () => {
+  assert.equal(L.autoCategory('POOJA SAMAGRI'), 'Pooja');
+  assert.equal(L.autoCategory('PUJA'), 'Pooja');
+  assert.equal(L.autoCategory('TEMPLE VISIT'), 'Pooja');
+  assert.equal(L.autoCategory('PRASADAM'), 'Pooja');
+  assert.equal(L.autoCategory('DEVOTIONAL SONGS'), 'Devotional');
+  assert.equal(L.autoCategory('BHAJAN'), 'Devotional');
+  assert.equal(L.autoCategory('AARTI'), 'Devotional');
+  assert.equal(L.autoCategory('DONATION TO TEMPLE'), 'Devotional');
+  assert.equal(L.autoCategory('DIWALI'), 'Festival');
+  assert.equal(L.autoCategory('SANKRANTI'), 'Festival');
+  assert.equal(L.autoCategory('DUSSEHRA'), 'Festival');
+  assert.equal(L.autoCategory('UGADI'), 'Festival');
+  assert.equal(L.autoCategory('FESTIVAL SHOPPING'), 'Festival');
+  assert.equal(L.autoCategory('FUNCTION HALL'), 'Festival');
+  assert.equal(L.autoCategory('DONATION'), 'Temple / Donations');
+  assert.equal(L.autoCategory('WEDDING'), 'Wedding & Functions');
+  assert.equal(L.autoCategory('NAVRATRI'), 'Festivals & Pooja');
+  const names = L.categoryGroups().find(group => group.name === 'Family & religious').categories.map(c => c.name);
+  assert.deepEqual(names.filter(name => ['Pooja', 'Devotional', 'Festival'].includes(name)), ['Devotional', 'Pooja', 'Festival']);
+  for (const name of ['Pooja', 'Devotional', 'Festival']) {
+    const cat = L.categories().find(c => c.name === name);
+    assert.equal(cat.group, 'Family & religious');
+    assert.equal(cat.role, 'spend');
+  }
+  const { rows } = L.decorate([
+    { date: '2026-09-06', desc: 'POOJA SAMAGRI', raw: -20 },
+    { date: '2026-09-06', desc: 'DONATION TO TEMPLE', raw: -30 },
+    { date: '2026-09-06', desc: 'DIWALI', raw: -40 }
+  ], 'bank', {});
+  assert.deepEqual(rows.map(t => t.c), ['Pooja', 'Devotional', 'Festival']);
+  assert.equal(L.summarize(rows).totalSpend, 90);
 });
 
 test('similar payees ignore changing references and stay inside a ten dollar band', () => {
