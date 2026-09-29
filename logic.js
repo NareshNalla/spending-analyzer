@@ -8,26 +8,78 @@
   'use strict';
 
   // localStorage key spend_v3. Existing fields stay: t, r, m, f, to, amn, amx, th, sm.
-  // Optional additions: v (tab), b (category budgets), g (savings goals).
+  // Optional: v (tab), b (budgets), g (goals), and oc on a transaction (that row's category only).
   const STORAGE_KEY = 'spend_v3';
   const BACKUP_VERSION = 1;
 
+  // name, color, regex, mark, group, role, optional label.
+  // Role spend counts as an expense. Savings is money set aside. Transfer is neither.
+  // First matching regex wins, so specific merchants stay above broad ones.
+  // Older names (Housing, Groceries, Transport, Utilities, Health, ...) stay valid.
   const CATS = [
-    ['Income', '#16a34a', /payroll|direct deposit|direct dep|salary|paycheck|\bbonus\b|dividend|\brefund\b|reversal|interest paid/i, '💰'],
-    ['Transfers', '#64748b', /zelle|venmo|paypal|cash app|\btransfers?\b|\btransferred\b|autopay|payment\W{0,6}thank|online payment|\bwire\b|credit card pmt|\bepay\b/i, '↔'],
-    ['Fees', '#dc2626', /\bfees?\b|interest charge|overdraft|finance charge|\bpenalty\b/i, '!'],
-    ['Dining', '#ea580c', /restaurant|\bcafe\b|\bcoffee\b|starbucks|mcdonald|chipotle|pizza|doordash|uber\s?eats|ubereats|grubhub|dunkin|subway|\btaco\b|\bgrill\b|\bdiner\b|\bbbq\b|burger|bakery|biryani|wingstop|chick-fil/i, '🍴'],
-    ['Groceries', '#15803d', /kroger|publix|walmart|aldi|whole foods|trader joe|costco|safeway|grocery|patel|\bh mart\b|sprouts|instacart|supermarket|\bmarkets?\b/i, '🛒'],
-    ['Transport', '#0284c7', /\bshell\b|chevron|exxon|\bbp\b|\bgas\b|\bfuel\b|\buber\b|\blyft\b|marta|parking|\btoll\b|racetrac|quiktrip|\bqt\b|citgo|mobil|peach pass|transit/i, '🚌'],
-    ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|\bsubscription\b|patreon|icloud/i, '▶'],
-    ['Utilities', '#a16207', /electric|georgia power|\bwater\b|internet|comcast|xfinity|at&t|verizon|t-mobile|\butility\b|insurance|geico|state farm|allstate|spectrum|\bgas co\b|atmos|\bphone\b|\bcable\b/i, '⚡'],
-    ['Health', '#be185d', /\bcvs\b|walgreens|pharmacy|clinic|hospital|dental|medical|\bhealth\b|doctor|vision|optum|aetna|labcorp|quest diag/i, '+'],
-    ['Housing', '#0f766e', /\brent\b|mortgage|\bhoa\b|\blease\b|apartment|property|homeowner/i, '⌂'],
-    ['Travel', '#4f46e5', /airline|delta air|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|\bflights?\b|motel|\btrips?\b/i, '✈'],
-    ['Entertainment', '#c026d3', /\bamc\b|cinema|movie|ticketmaster|steam|\bgames?\b|gamestop|concert|bowling|theater|\bshow\b/i, '★'],
-    ['Shopping', '#e11d48', /amazon|\bamzn\b|\btarget\b|best buy|ebay|etsy|home depot|\blowes?\b|\blowe's\b|ikea|\bnike\b|\bmacy\b|tj maxx|marshalls|\bshops?\b|\bstores?\b|retail/i, '🛍'],
-    ['Education', '#4d7c0f', /tuition|\bschool\b|university|udemy|coursera|\bbooks?\b|\bclasses?\b|\bcourse\b|training|seminar/i, '📚'],
-    ['Other', '#475569', /^$/, '•']
+    ['Income', '#16a34a', /payroll|direct deposit|direct dep|salary|paycheck|\bbonus\b|dividend|\brefund\b|reversal|interest paid|\bstipend\b/i, '💰', 'Income', 'income'],
+    ['Mutual Fund / SIP', '#0369a1', /\bsip\b|mutual fund|groww|zerodha|kuvera|paytm money|mf purchase/i, '📈', 'Savings & investments', 'savings'],
+    ['PPF', '#0369a1', /\bppf\b|\bepf\b|\bnps\b|public provident|provident fund/i, '📈', 'Savings & investments', 'savings'],
+    ['Fixed Deposit', '#0369a1', /fixed deposit|\bfd\b/i, '📈', 'Savings & investments', 'savings'],
+    ['Recurring Deposit', '#0369a1', /recurring deposit/i, '📈', 'Savings & investments', 'savings'],
+    ['Savings', '#0f766e', /transfer to savings|savings account|savings transfer/i, '🏦', 'Savings & investments', 'savings'],
+    ['Gold & Jewellery', '#a16207', /tanishq|malabar gold|kalyan jewell|joyalukkas|\bgold\b|jewellery|jewelry/i, '◆', 'Savings & investments', 'savings'],
+    ['Food Delivery', '#ea580c', /swiggy|zomato|eatsure/i, '🛵', 'Food', 'spend', 'Food Delivery (Swiggy/Zomato)'],
+    ['Milk / Dairy', '#15803d', /\bmilk\b|amul|mother dairy|heritage foods/i, '🥛', 'Food', 'spend'],
+    ['Vegetables', '#15803d', /vegetable|\bsabzi\b|\bveggies?\b/i, '🥬', 'Food', 'spend'],
+    ['Groceries', '#15803d', /kroger|publix|walmart|aldi|whole foods|trader joe|costco|safeway|grocery|kirana|patel|\bh mart\b|sprouts|instacart|supermarket|\bmarkets?\b|dmart|d-mart|bigbasket|jiomart|reliance fresh|blinkit|zepto|instamart/i, '🛒', 'Food', 'spend', 'Groceries / Kirana'],
+    ['Dining', '#c2410c', /restaurant|\bcafe\b|\bcoffee\b|starbucks|mcdonald|chipotle|pizza|doordash|uber\s?eats|ubereats|grubhub|dunkin|subway|\btaco\b|\bgrill\b|\bdiner\b|\bbbq\b|burger|bakery|biryani|wingstop|chick-fil/i, '🍴', 'Food', 'spend'],
+    ['Auto / Cab', '#0284c7', /\bola\b|rapido|uber|lyft/i, '🚕', 'Transport', 'spend', 'Auto / Cab (Ola/Uber/Rapido)'],
+    ['Fuel', '#0369a1', /\bshell\b|chevron|exxon|\bbp\b|petrol|diesel|hpcl|iocl|indian oil|bharat petroleum|nayara|\bfuel\b|racetrac|quiktrip|\bqt\b|citgo|\bmobil\b/i, '⛽', 'Transport', 'spend', 'Fuel / Petrol'],
+    ['Metro / Bus / Train', '#0369a1', /\bmetro\b|bmrc|dmrc|\birctc\b|bus pass|local train|\bmarta\b|transit/i, '🚇', 'Transport', 'spend'],
+    ['Transport', '#0284c7', /parking|\btoll\b|peach pass/i, '🚌', 'Transport', 'spend'],
+    ['Rent', '#0f766e', /\brent\b/i, '⌂', 'Housing', 'spend'],
+    ['Home Loan EMI', '#0f766e', /home loan|housing loan|\bmortgage\b|home emi/i, '⌂', 'Housing', 'spend'],
+    ['Property Tax', '#0f766e', /property tax/i, '⌂', 'Housing', 'spend'],
+    ['Society / Maintenance', '#0f766e', /society maintenance|maintenance charge|\bhoa\b|apartment maintenance/i, '⌂', 'Housing', 'spend', 'Society / Maintenance Charges'],
+    ['Home Repairs', '#0f766e', /home repair|\bplumber\b|electrician/i, '⌂', 'Housing', 'spend', 'Home Repairs & Maintenance'],
+    ['Housing', '#115e59', /\blease\b|apartment|homeowner|\bproperty\b/i, '⌂', 'Housing', 'spend'],
+    ['Electricity', '#a16207', /electric|georgia power|bescom|msedcl|tata power|cescom|tangedco|\bkseb\b|mseb/i, '⚡', 'Utilities', 'spend'],
+    ['Water', '#0369a1', /\bwater\b|bwssb/i, '💧', 'Utilities', 'spend'],
+    ['Gas / LPG', '#a16207', /indane|hp gas|bharat gas|\blpg\b|gas cylinder|\bigl\b|mahanagar gas|\bgas co\b|atmos/i, '🔥', 'Utilities', 'spend', 'Gas / LPG Cylinder'],
+    ['Internet', '#7c3aed', /broadband|fibernet|hathway|jiofiber|jio fiber|comcast|xfinity|\binternet\b/i, '🌐', 'Utilities', 'spend', 'Internet / Broadband'],
+    ['Mobile Recharge', '#7c3aed', /mobile recharge|\bjio\b|airtel|vodafone|bsnl|verizon|t-mobile|\brecharge\b/i, '📱', 'Utilities', 'spend'],
+    ['DTH / Cable', '#7c3aed', /\bdth\b|tata play|tata sky|dishtv|dish tv|sun direct|\bcable\b/i, '📺', 'Utilities', 'spend'],
+    ['Utilities', '#a16207', /\butility\b|spectrum|\bphone\b/i, '⚡', 'Utilities', 'spend'],
+    ['Maid / Domestic Help', '#7c2d12', /\bmaid\b|domestic help|house ?help/i, '🧹', 'Household help', 'spend'],
+    ['Cook', '#7c2d12', /\bcook\b/i, '🍳', 'Household help', 'spend'],
+    ['Driver', '#7c2d12', /\bdriver\b/i, '🚗', 'Household help', 'spend'],
+    ['School Fees', '#4d7c0f', /school fee/i, '📚', 'Education', 'spend', "Children's School Fees"],
+    ['Tuition / Coaching', '#4d7c0f', /tuition|coaching|byju|unacademy|vedantu/i, '📚', 'Education', 'spend'],
+    ['Education', '#4d7c0f', /\bschool\b|university|udemy|coursera|\bbooks?\b|\bclasses?\b|\bcourse\b|training|seminar/i, '📚', 'Education', 'spend'],
+    ['Health Insurance', '#be185d', /health insurance|star health|care health|niva bupa/i, '+', 'Health & insurance', 'spend'],
+    ['Life Insurance', '#be185d', /\blic\b|life insurance|term insurance/i, '+', 'Health & insurance', 'spend', 'Life Insurance / LIC'],
+    ['Vehicle Insurance', '#be185d', /geico|state farm|allstate|vehicle insurance|car insurance/i, '+', 'Health & insurance', 'spend'],
+    ['Medical / Pharmacy', '#be185d', /\bcvs\b|walgreens|pharmacy|apollo pharmacy|medplus|netmeds|\b1mg\b|pharmeasy|clinic|hospital|dental|\bhealth\b|doctor|vision|optum|aetna|labcorp|quest diag/i, '+', 'Health & insurance', 'spend'],
+    ['Health', '#9d174d', /medical/i, '+', 'Health & insurance', 'spend'],
+    ['Vehicle EMI', '#9f1239', /vehicle emi|car emi|car loan|bike loan|two wheeler/i, '🏦', 'Loans & tax', 'spend'],
+    ['Personal Loan EMI', '#9f1239', /personal loan/i, '🏦', 'Loans & tax', 'spend'],
+    ['Income Tax / TDS', '#9f1239', /income tax|\btds\b|advance tax/i, '🏦', 'Loans & tax', 'spend'],
+    ['Fees', '#dc2626', /\bfees?\b|interest charge|overdraft|finance charge|\bpenalty\b/i, '!', 'Loans & tax', 'spend'],
+    ['Festivals & Pooja', '#a21caf', /pooja|\bpuja\b|diwali|navratri|\bfestival\b/i, '✦', 'Family & religious', 'spend'],
+    ['Temple / Donations', '#a21caf', /temple|donation|tirupati|gurudwara|\bchurch\b|mosque/i, '✦', 'Family & religious', 'spend'],
+    ['Family Support', '#a21caf', /family support|sending money home|money home/i, '✦', 'Family & religious', 'spend', 'Family Support / Sending Money Home'],
+    ['Gifts', '#a21caf', /\bgifts?\b/i, '✦', 'Family & religious', 'spend'],
+    ['Wedding & Functions', '#a21caf', /wedding|function hall|\bmarriage\b/i, '✦', 'Family & religious', 'spend'],
+    ['Subscriptions', '#7c3aed', /netflix|spotify|hulu|disney|hotstar|sonyliv|zee5|apple\.|itunes|google \*|youtube|openai|anthropic|claude|prime video|adobe|microsoft|\bsubscription\b|patreon|icloud/i, '▶', 'Lifestyle', 'spend', 'Entertainment / OTT'],
+    ['Entertainment', '#c026d3', /\bamc\b|cinema|movie|ticketmaster|steam|\bgames?\b|gamestop|concert|bowling|theater|\bshow\b/i, '★', 'Lifestyle', 'spend'],
+    ['Shopping', '#e11d48', /amazon|\bamzn\b|flipkart|myntra|ajio|meesho|\btarget\b|best buy|ebay|etsy|home depot|\blowes?\b|\blowe's\b|ikea|\bnike\b|\bmacy\b|tj maxx|marshalls|\bshops?\b|\bstores?\b|retail/i, '🛍', 'Lifestyle', 'spend', 'Shopping (Amazon/Flipkart/Myntra)'],
+    ['Travel', '#4f46e5', /airline|delta air|united air|southwest|american air|hotel|airbnb|marriott|hilton|expedia|booking\.com|\bflights?\b|motel|\btrips?\b/i, '✈', 'Lifestyle', 'spend'],
+    ['Credit Card Bill', '#64748b', /credit card bill|credit card payment|card bill|\bcc payment\b/i, '↔', 'Transfers', 'transfer'],
+    ['UPI Transfer', '#64748b', /\bupi\b|phonepe|\bgpay\b|google pay/i, '↔', 'Transfers', 'transfer', 'UPI Transfers'],
+    ['Transfers', '#64748b', /zelle|venmo|paypal|cash app|\btransfers?\b|\btransferred\b|autopay|payment\W{0,6}thank|online payment|\bwire\b|credit card pmt|\bepay\b/i, '↔', 'Transfers', 'transfer'],
+    ['Other', '#475569', /^$/, '•', 'Other', 'spend']
+  ];
+
+  const GROUP_ORDER = [
+    'Income', 'Housing', 'Utilities', 'Household help', 'Food', 'Transport',
+    'Family & religious', 'Education', 'Health & insurance', 'Loans & tax',
+    'Savings & investments', 'Lifestyle', 'Transfers', 'Other'
   ];
 
   const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
@@ -82,6 +134,64 @@
     ['2026-03-28', 'APPLE.COM/BILL', -9.99]
   ].map(([date, desc, raw]) => ({ date, desc, raw }));
 
+  const SAMPLE_HISTORY = SAMPLE_TXNS.concat([
+    ['2025-10-03', 'PAYROLL ACME CORP', 3100],
+    ['2025-10-04', 'RENT PAYMENT', -1450],
+    ['2025-10-06', 'KIRANA STORE', -74.2],
+    ['2025-10-08', 'BESCOM ELECTRICITY', -68],
+    ['2025-10-11', 'SWIGGY ORDER', -32.5],
+    ['2025-10-14', 'SIP GROWW MUTUAL FUND', -500],
+    ['2025-10-18', 'UPI/RAHUL SHARMA', -150],
+    ['2025-10-21', 'HP GAS LPG', -95],
+    ['2025-11-03', 'PAYROLL ACME CORP', 3100],
+    ['2025-11-04', 'RENT PAYMENT', -1450],
+    ['2025-11-07', 'BIGBASKET', -88.4],
+    ['2025-11-09', 'AIRTEL MOBILE RECHARGE', -29],
+    ['2025-11-12', 'OLA CAB', -22.6],
+    ['2025-11-16', 'TRANSFER TO SAVINGS', -400],
+    ['2025-11-20', 'APOLLO PHARMACY', -18.75],
+    ['2025-12-03', 'PAYROLL ACME CORP', 3100],
+    ['2025-12-04', 'RENT PAYMENT', -1450],
+    ['2025-12-08', 'DMART GROCERY', -102.3],
+    ['2025-12-11', 'LIC OF INDIA', -240],
+    ['2025-12-15', 'CREDIT CARD BILL', -900],
+    ['2025-12-19', 'ZOMATO', -27.8],
+    ['2025-12-24', 'TEMPLE DONATION', -50],
+    ['2026-04-03', 'PAYROLL ACME CORP', 3300],
+    ['2026-04-04', 'RENT PAYMENT', -1450],
+    ['2026-04-07', 'INDIAN OIL PETROL', -55],
+    ['2026-04-10', 'JIO FIBER BROADBAND', -79],
+    ['2026-04-14', 'SIP GROWW MUTUAL FUND', -500],
+    ['2026-04-18', 'MAID DOMESTIC HELP', -300],
+    ['2026-05-03', 'PAYROLL ACME CORP', 3300],
+    ['2026-05-04', 'RENT PAYMENT', -1450],
+    ['2026-05-08', 'AMUL MILK', -12.4],
+    ['2026-05-12', 'METRO CARD RECHARGE', -40],
+    ['2026-05-16', 'PPF CONTRIBUTION', -1000],
+    ['2026-05-20', 'SCHOOL FEE', -750],
+    ['2026-06-03', 'PAYROLL ACME CORP', 3300],
+    ['2026-06-04', 'HOME LOAN EMI', -1800],
+    ['2026-06-09', 'VEGETABLE MARKET', -26.5],
+    ['2026-06-14', 'NETFLIX.COM', -15.49],
+    ['2026-06-18', 'FIXED DEPOSIT', -2000],
+    ['2026-07-03', 'PAYROLL ACME CORP', 3300],
+    ['2026-07-04', 'RENT PAYMENT', -1450],
+    ['2026-07-08', 'SWIGGY INSTAMART', -64],
+    ['2026-07-12', 'TATA PLAY DTH', -35],
+    ['2026-07-19', 'FAMILY SUPPORT SENDING MONEY HOME', -200],
+    ['2026-08-03', 'PAYROLL ACME CORP', 3300],
+    ['2026-08-04', 'RENT PAYMENT', -1450],
+    ['2026-08-09', 'FLIPKART', -49.9],
+    ['2026-08-15', 'RECURRING DEPOSIT', -300],
+    ['2026-08-22', 'HEALTH INSURANCE PREMIUM', -180],
+    ['2026-09-05', 'PAYROLL ACME CORP', 3300],
+    ['2026-09-07', 'SWIGGY ORDER', -36.2],
+    ['2026-09-10', 'BESCOM ELECTRICITY', -82],
+    ['2026-09-12', 'TRANSFER TO SAVINGS', -400],
+    ['2026-09-15', 'RENT PAYMENT', -1450],
+    ['2026-09-18', 'NETFLIX.COM', -15.49]
+  ].map(([date, desc, raw]) => ({ date, desc, raw })));
+
   function round2(n) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
   }
@@ -91,12 +201,36 @@
   }
 
   function categories() {
-    return CATS.map(c => ({ name: c[0], color: c[1], mark: c[3] }));
+    return CATS.map(c => ({
+      name: c[0],
+      color: c[1],
+      mark: c[3],
+      group: c[4],
+      role: c[5],
+      label: c[6] || c[0]
+    }));
+  }
+
+  function categoryGroups() {
+    const grouped = new Map();
+    categories().forEach(cat => {
+      if (!grouped.has(cat.group)) grouped.set(cat.group, []);
+      grouped.get(cat.group).push(cat);
+    });
+    return GROUP_ORDER.filter(name => grouped.has(name)).map(name => ({
+      name,
+      categories: grouped.get(name)
+    }));
   }
 
   function canonicalCategory(name) {
     const hit = CATS.find(c => c[0].toLowerCase() === String(name || '').trim().toLowerCase());
     return hit ? hit[0] : null;
+  }
+
+  function categoryRole(name) {
+    const hit = CATS.find(c => c[0] === name);
+    return hit ? hit[5] : 'spend';
   }
 
   function merchant(d) {
@@ -121,6 +255,8 @@
   }
 
   function categoryOf(txn, rules) {
+    const own = canonicalCategory(txn && txn.oc);
+    if (own) return own;
     const key = txn && txn.m;
     if (key && rules && rules[key]) {
       const known = canonicalCategory(rules[key]);
@@ -480,7 +616,8 @@
       else pos++;
       const m = t.m || merchant(t.desc || '');
       const c = categoryOf({ ...t, m }, rules || {});
-      if (c === 'Income' || c === 'Transfers' || c === 'Other') continue;
+      const role = categoryRole(c);
+      if (role !== 'spend' || c === 'Other') continue;
       if (t.raw < 0) voteNeg++;
       else votePos++;
     }
@@ -490,11 +627,17 @@
   }
 
   function isSpend(t) {
-    return t.f < 0 && t.c !== 'Transfers';
+    return !!(t && t.f < 0 && categoryRole(t.c) === 'spend');
   }
 
   function isIncome(t) {
-    return t.f > 0 && t.c !== 'Transfers';
+    if (!t || !(t.f > 0)) return false;
+    const role = categoryRole(t.c);
+    return role === 'income' || role === 'spend';
+  }
+
+  function isSavings(t) {
+    return !!(t && categoryRole(t.c) === 'savings' && t.f < 0);
   }
 
   function decorate(txns, modePref, rules) {
@@ -540,13 +683,17 @@
     for (const t of rows || []) {
       const month = String(t.date || '').slice(0, 7);
       if (!/^\d{4}-\d{2}$/.test(month)) continue;
-      if (!map.has(month)) map.set(month, { month, income: 0, spend: 0, count: 0 });
+      if (!map.has(month)) map.set(month, { month, income: 0, spend: 0, savings: 0, count: 0 });
       const item = map.get(month);
       item.count += 1;
       if (isSpend(t)) item.spend = round2(item.spend + (-t.f));
       else if (isIncome(t)) item.income = round2(item.income + t.f);
+      if (categoryRole(t.c) === 'savings') item.savings = round2(item.savings + (-t.f));
     }
-    return [...map.values()].sort((a, b) => a.month.localeCompare(b.month));
+    return [...map.values()].map(item => ({
+      ...item,
+      net: round2(item.income - item.spend - item.savings)
+    })).sort((a, b) => a.month.localeCompare(b.month));
   }
 
   function topSpendMerchant(rows) {
@@ -601,12 +748,16 @@
     const incomeRows = list.filter(isIncome);
     const totalSpend = round2(spendRows.reduce((sum, t) => sum + (-t.f), 0));
     const totalIncome = round2(incomeRows.reduce((sum, t) => sum + t.f, 0));
-    const net = round2(totalIncome - totalSpend);
+    const totalSavings = round2(list.reduce((sum, t) => (
+      categoryRole(t.c) === 'savings' ? sum + (-t.f) : sum
+    ), 0));
+    const net = round2(totalIncome - totalSpend - totalSavings);
     const cats = categoryTotals(list);
     const months = summarizeMonths(list);
     return {
       totalSpend,
       totalIncome,
+      totalSavings,
       net,
       avg: spendRows.length ? round2(totalSpend / spendRows.length) : 0,
       savingsRate: totalIncome ? round2((net / totalIncome) * 100) : null,
@@ -619,6 +770,75 @@
       months,
       mom: monthOverMonth(months),
       recurring: recurringMerchants(list)
+    };
+  }
+
+  function monthsByYear(rows) {
+    const months = summarizeMonths(rows);
+    const map = new Map();
+    months.forEach(item => {
+      const year = item.month.slice(0, 4);
+      if (!map.has(year)) map.set(year, { year, months: [], income: 0, spend: 0, savings: 0 });
+      const bucket = map.get(year);
+      bucket.months.push(item);
+      bucket.income = round2(bucket.income + item.income);
+      bucket.spend = round2(bucket.spend + item.spend);
+      bucket.savings = round2(bucket.savings + item.savings);
+    });
+    return [...map.values()].map(bucket => ({
+      ...bucket,
+      net: round2(bucket.income - bucket.spend - bucket.savings),
+      months: bucket.months.slice().sort((a, b) => b.month.localeCompare(a.month))
+    })).sort((a, b) => b.year.localeCompare(a.year));
+  }
+
+  function daysInMonth(ym) {
+    const parts = String(ym || '').split('-');
+    const y = +parts[0];
+    const m = +parts[1];
+    if (!y || !m) return 30;
+    return new Date(y, m, 0).getDate();
+  }
+
+  function projections(rows, today) {
+    const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
+    const currentMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const elapsed = now.getDate();
+    const dim = daysInMonth(currentMonth);
+    const months = summarizeMonths(rows);
+    const current = months.find(item => item.month === currentMonth) || null;
+    const finished = months.filter(item => item.month < currentMonth);
+    const recent = finished.slice(-3);
+    const average = key => recent.length
+      ? round2(recent.reduce((sum, item) => sum + item[key], 0) / recent.length)
+      : 0;
+    const pace = (amount) => {
+      if (!current || elapsed < 1) return null;
+      if (!amount) return null;
+      return round2(amount / Math.min(elapsed, dim) * dim);
+    };
+    const avgSpend = average('spend');
+    const avgIncome = average('income');
+    const avgSavings = average('savings');
+    return {
+      estimate: true,
+      currentMonth,
+      currentLabel: formatMonth(currentMonth, true),
+      elapsed,
+      days: dim,
+      spentSoFar: current ? current.spend : 0,
+      incomeSoFar: current ? current.income : 0,
+      savedSoFar: current ? current.savings : 0,
+      projectedMonthSpend: pace(current && current.spend),
+      projectedMonthIncome: pace(current && current.income),
+      projectedMonthSavings: pace(current && current.savings),
+      averageMonthSpend: avgSpend,
+      averageMonthIncome: avgIncome,
+      averageMonthSavings: avgSavings,
+      projectedYearSpend: round2(avgSpend * 12),
+      projectedYearIncome: round2(avgIncome * 12),
+      projectedYearSavings: round2(avgSavings * 12),
+      basedOn: recent.map(item => item.month)
     };
   }
 
@@ -637,7 +857,7 @@
   }
 
   function spendCategoryNames() {
-    return CATS.map(c => c[0]).filter(name => name !== 'Income' && name !== 'Transfers');
+    return CATS.filter(c => c[5] === 'spend').map(c => c[0]);
   }
 
   function normalizeBudgets(raw) {
@@ -646,7 +866,7 @@
     Object.keys(raw).forEach(key => {
       const name = canonicalCategory(key);
       const amount = Number(raw[key]);
-      if (!name || name === 'Income' || name === 'Transfers') return;
+      if (!name || categoryRole(name) !== 'spend') return;
       if (!Number.isFinite(amount) || amount <= 0) return;
       out[name] = round2(amount);
     });
@@ -764,7 +984,11 @@
       const old = t.m;
       if (old && old !== m && nextRules[old] && !nextRules[m]) nextRules[m] = nextRules[old];
       const id = t.id || uid();
-      return { ...t, id, m };
+      const own = canonicalCategory(t.oc);
+      const next = { ...t, id, m };
+      if (own) next.oc = own;
+      else delete next.oc;
+      return next;
     });
     const cleaned = {};
     Object.keys(nextRules).forEach(key => {
@@ -777,10 +1001,13 @@
   return {
     STORAGE_KEY,
     SAMPLE_TXNS,
+    SAMPLE_HISTORY,
     round2,
     uid,
     categories,
+    categoryGroups,
     canonicalCategory,
+    categoryRole,
     merchant,
     autoCategory,
     categoryOf,
@@ -795,10 +1022,13 @@
     resolveMode,
     isSpend,
     isIncome,
+    isSavings,
     decorate,
     filterRows,
     summarize,
     summarizeMonths,
+    monthsByYear,
+    projections,
     exportCsv,
     migrate,
     BACKUP_VERSION,

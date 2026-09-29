@@ -172,7 +172,7 @@ test('categories avoid the old false positives', () => {
   assert.equal(L.autoCategory('INTEREST CHARGE'), 'Fees');
   assert.equal(L.autoCategory('INTEREST PAID'), 'Income');
   assert.equal(L.autoCategory('UBER EATS'), 'Dining');
-  assert.equal(L.autoCategory('UBER TRIP'), 'Transport');
+  assert.equal(L.autoCategory('UBER TRIP'), 'Auto / Cab');
   assert.equal(L.autoCategory('PAYMENT THANK YOU'), 'Transfers');
   assert.equal(L.autoCategory('RESTORE HARDWARE'), 'Other');
   assert.equal(L.autoCategory('DELTA AIR LINES'), 'Travel');
@@ -228,7 +228,7 @@ test('sample totals exclude transfers and do not call payroll the top merchant',
   assert.equal(summary.totalIncome, 9650);
   assert.equal(summary.spendCount, 28);
   assert.equal(summary.incomeCount, 4);
-  assert.equal(summary.topCategory.name, 'Housing');
+  assert.equal(summary.topCategory.name, 'Rent');
   assert.equal(summary.topCategory.amount, 4350);
   assert.equal(summary.topMerchant.name, 'Rent');
   assert.equal(summary.topMerchant.amount, 4350);
@@ -251,7 +251,7 @@ test('filters understand a max of zero and a search', () => {
   const { rows } = L.decorate(L.SAMPLE_TXNS, 'bank', {});
   const none = L.filterRows(rows, { amtMax: 0, amtMin: 0 });
   assert.equal(none.length, 0);
-  const rent = L.filterRows(rows, { q: 'rent', cat: 'Housing' });
+  const rent = L.filterRows(rows, { q: 'rent', cat: 'Rent' });
   assert.equal(rent.length, 3);
   const january = L.filterRows(rows, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
   assert.ok(january.every(t => t.date.startsWith('2026-01')));
@@ -330,12 +330,12 @@ test('goals drop blanks and keep a deadline when it is a real date', () => {
 
 test('plan report uses the latest month unless the date filter is a single month', () => {
   const { rows } = L.decorate(L.SAMPLE_TXNS, 'bank', {});
-  const latest = L.planReport(rows, { Groceries: 80, Housing: 1450, Dining: 20 }, [], {});
+  const latest = L.planReport(rows, { Groceries: 80, Rent: 1450, Dining: 20 }, [], {});
   assert.equal(latest.month, '2026-03');
   const groceries = latest.statuses.find(item => item.name === 'Groceries');
   assert.equal(groceries.spent, 71.55);
   assert.equal(groceries.level, 'near');
-  const housing = latest.statuses.find(item => item.name === 'Housing');
+  const housing = latest.statuses.find(item => item.name === 'Rent');
   assert.equal(housing.spent, 1450);
   assert.equal(housing.level, 'ok');
   const dining = latest.statuses.find(item => item.name === 'Dining');
@@ -399,4 +399,70 @@ test('JSON backup round-trips and also accepts a raw spend_v3 object', () => {
 
   assert.throws(() => L.parseBackup('not json'), /valid JSON/);
   assert.throws(() => L.parseBackup('{"hello":1}'), /does not look like/);
+});
+
+test('a category on one transaction does not change the merchant rule', () => {
+  const rules = { Netflix: 'Subscriptions' };
+  const one = { desc: 'NETFLIX.COM', m: 'Netflix', oc: 'Entertainment' };
+  const other = { desc: 'NETFLIX.COM', m: 'Netflix' };
+  assert.equal(L.categoryOf(one, rules), 'Entertainment');
+  assert.equal(L.categoryOf(other, rules), 'Subscriptions');
+  assert.equal(L.canonicalCategory('Housing'), 'Housing');
+  assert.equal(L.canonicalCategory('Groceries'), 'Groceries');
+  const migrated = L.migrate([one, other], rules);
+  assert.equal(migrated.txns[0].oc, 'Entertainment');
+  assert.equal(migrated.txns[1].oc, undefined);
+  assert.equal(migrated.rules.Netflix, 'Subscriptions');
+});
+
+test('savings and credit-card bills are not spending', () => {
+  assert.equal(L.autoCategory('SWIGGY ORDER'), 'Food Delivery');
+  assert.equal(L.autoCategory('ZOMATO'), 'Food Delivery');
+  assert.equal(L.autoCategory('TRANSFER TO SAVINGS'), 'Savings');
+  assert.equal(L.autoCategory('SIP GROWW MUTUAL FUND'), 'Mutual Fund / SIP');
+  assert.equal(L.autoCategory('PPF CONTRIBUTION'), 'PPF');
+  assert.equal(L.autoCategory('FIXED DEPOSIT'), 'Fixed Deposit');
+  assert.equal(L.autoCategory('LIC OF INDIA'), 'Life Insurance');
+  assert.equal(L.autoCategory('CREDIT CARD BILL'), 'Credit Card Bill');
+  assert.equal(L.autoCategory('UPI/RAHUL SHARMA'), 'UPI Transfer');
+  assert.equal(L.autoCategory('BESCOM ELECTRICITY'), 'Electricity');
+  assert.equal(L.autoCategory('RENT PAYMENT'), 'Rent');
+  assert.equal(L.autoCategory('AIRTEL MOBILE RECHARGE'), 'Mobile Recharge');
+  const { rows } = L.decorate([
+    { date: '2026-09-05', desc: 'PAYROLL ACME', raw: 1000 },
+    { date: '2026-09-06', desc: 'KROGER', raw: -100 },
+    { date: '2026-09-07', desc: 'TRANSFER TO SAVINGS', raw: -200 },
+    { date: '2026-09-08', desc: 'CREDIT CARD BILL', raw: -300 }
+  ], 'bank', {});
+  const summary = L.summarize(rows);
+  assert.equal(summary.totalIncome, 1000);
+  assert.equal(summary.totalSpend, 100);
+  assert.equal(summary.totalSavings, 200);
+  assert.equal(summary.net, 700);
+  assert.equal(L.isSpend(rows.find(t => t.desc.startsWith('TRANSFER'))), false);
+  assert.equal(L.isSavings(rows.find(t => t.desc.startsWith('TRANSFER'))), true);
+  assert.equal(L.isSpend(rows.find(t => t.desc.startsWith('CREDIT'))), false);
+});
+
+test('months group by year and projections are labeled from pace', () => {
+  const { rows } = L.decorate(L.SAMPLE_HISTORY, 'bank', {});
+  const years = L.monthsByYear(rows);
+  assert.deepEqual(years.map(year => year.year), ['2026', '2025']);
+  assert.deepEqual(years[0].months.map(item => item.month.slice(5)), ['09', '08', '07', '06', '05', '04', '03', '02', '01']);
+  assert.ok(years[1].months.some(item => item.month === '2025-10'));
+  const september = years[0].months.find(item => item.month === '2026-09');
+  assert.equal(september.savings, 400);
+  assert.ok(september.spend > 0);
+  assert.equal(september.net, L.round2(september.income - september.spend - september.savings));
+  const report = L.projections(rows, new Date(2026, 8, 29));
+  assert.equal(report.estimate, true);
+  assert.equal(report.currentMonth, '2026-09');
+  assert.equal(report.elapsed, 29);
+  assert.equal(report.days, 30);
+  assert.equal(report.spentSoFar, september.spend);
+  assert.equal(report.projectedMonthSpend, L.round2(september.spend / 29 * 30));
+  assert.equal(report.projectedMonthSavings, L.round2(400 / 29 * 30));
+  assert.deepEqual(report.basedOn, ['2026-06', '2026-07', '2026-08']);
+  assert.equal(report.projectedYearSpend, L.round2(report.averageMonthSpend * 12));
+  assert.ok(report.averageMonthSavings > 0);
 });

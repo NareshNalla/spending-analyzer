@@ -89,7 +89,8 @@
     S.amtMax = (d.amx == null || Number(d.amx) === 999999) ? null : Number(d.amx);
     S.theme = d.th || 'auto';
     S.selectedMonth = d.sm || '';
-    if (['tx', 'mer', 'cat', 'month'].includes(d.v)) S.view = d.v;
+    if (d.v === 'month') S.view = 'tx';
+    else if (['tx', 'mer', 'cat'].includes(d.v)) S.view = d.v;
     S.budgets = L.normalizeBudgets(d.b);
     S.goals = L.normalizeGoals(d.g);
     planSig = '';
@@ -129,7 +130,7 @@
   function themeColors() {
     const style = getComputedStyle(document.documentElement);
     const pick = name => style.getPropertyValue(name).trim();
-    return { text: pick('--mut'), grid: pick('--grid'), income: pick('--pos'), spend: pick('--neg') };
+    return { text: pick('--mut'), grid: pick('--grid'), income: pick('--pos'), spend: pick('--neg'), save: pick('--save') };
   }
 
   function currentView() {
@@ -291,11 +292,10 @@
     const top = summary.topCategory;
     const merchant = summary.topMerchant;
     const largest = summary.largest;
-    const rate = summary.savingsRate == null ? '—' : summary.savingsRate.toFixed(1) + '%';
     $('#insights').innerHTML = [
       insight('Top category', top ? (MARK[top.name] || '') + ' ' + top.name : '—', top ? fmt(top.amount) : 'No spending in this view'),
       insight('Biggest merchant', merchant ? merchant.name : '—', merchant ? fmt(merchant.amount) + ' spent' : 'Spending only, not deposits'),
-      insight('Savings rate', rate, summary.totalIncome ? fmt(summary.net) + ' left after spending' : 'Add income to calculate a rate'),
+      insight('Savings set aside', fmt(summary.totalSavings || 0), 'Moved to savings or investments, not counted as spending'),
       insight('Largest purchase', largest ? fmt(-largest.f) : '—', largest ? largest.desc : 'No purchases in this view')
     ].join('');
   }
@@ -335,12 +335,13 @@
   }
 
   function fallbackChart(months) {
-    const max = Math.max(...months.map(m => Math.max(m.income, m.spend)), 1);
+    const max = Math.max(...months.map(m => Math.max(m.income, m.spend, m.savings || 0)), 1);
     return months.map(m => {
       const label = L.monthTick(m.month, true);
       return '<div class="pair"><span>' + esc(label) + '</span><div class="tracks">' +
         '<i class="in" style="width:' + (m.income / max) * 100 + '%"></i>' +
-        '<i class="out" style="width:' + (m.spend / max) * 100 + '%"></i></div></div>';
+        '<i class="out" style="width:' + (m.spend / max) * 100 + '%"></i>' +
+        '<i class="save" style="width:' + ((m.savings || 0) / max) * 100 + '%"></i></div></div>';
     }).join('');
   }
 
@@ -362,14 +363,17 @@
       const labels = months.map(m => L.monthTick(m.month, withYear));
       const income = months.map(m => m.income);
       const spend = months.map(m => m.spend);
+      const savings = months.map(m => m.savings || 0);
       canvas.hidden = false;
       fallback.hidden = true;
-      if (chart) {
+      if (chart && chart.data.datasets.length === 3) {
         chart.data.labels = labels;
         chart.data.datasets[0].data = income;
         chart.data.datasets[0].backgroundColor = colors.income;
         chart.data.datasets[1].data = spend;
         chart.data.datasets[1].backgroundColor = colors.spend;
+        chart.data.datasets[2].data = savings;
+        chart.data.datasets[2].backgroundColor = colors.save;
         chart.options.plugins.legend.labels.color = colors.text;
         chart.options.scales.x.ticks.color = colors.text;
         chart.options.scales.y.ticks.color = colors.text;
@@ -378,13 +382,15 @@
         chart.resize();
         return;
       }
+      if (chart) { chart.destroy(); chart = null; }
       chart = new window.Chart(canvas, {
         type: 'bar',
         data: {
           labels,
           datasets: [
-            { label: 'Income', data: income, backgroundColor: colors.income, borderRadius: 6, maxBarThickness: 28 },
-            { label: 'Spending', data: spend, backgroundColor: colors.spend, borderRadius: 6, maxBarThickness: 28 }
+            { label: 'Income', data: income, backgroundColor: colors.income, borderRadius: 6, maxBarThickness: 22 },
+            { label: 'Spending', data: spend, backgroundColor: colors.spend, borderRadius: 6, maxBarThickness: 22 },
+            { label: 'Savings', data: savings, backgroundColor: colors.save, borderRadius: 6, maxBarThickness: 22 }
           ]
         },
         options: {
@@ -411,8 +417,12 @@
   }
 
   function catOptions(selected) {
-    return CATS.map(c => '<option value="' + esc(c.name) + '"' + (c.name === selected ? ' selected' : '') + '>' +
-      esc(c.mark + ' ' + c.name) + '</option>').join('');
+    return L.categoryGroups().map(group => {
+      const options = group.categories.map(c =>
+        '<option value="' + esc(c.name) + '"' + (c.name === selected ? ' selected' : '') + '>' +
+        esc(c.mark + ' ' + c.label) + '</option>').join('');
+      return '<optgroup label="' + esc(group.name) + '">' + options + '</optgroup>';
+    }).join('');
   }
 
   function sortRows(rows) {
@@ -440,8 +450,9 @@
       '<td>' + esc(t.date) + '</td>' +
       '<td class="desc" title="' + esc(t.file || '') + '">' + esc(t.desc) + '</td>' +
       '<td class="merchant">' + esc(t.m) + '</td>' +
-      '<td><div class="cat-cell"><span class="swatch" style="background:' + COL[t.c] + '"></span>' +
-        '<select data-rule="' + esc(t.m) + '" aria-label="Category for ' + esc(t.m) + '">' + catOptions(t.c) + '</select></div></td>' +
+      '<td><div class="cat-cell"><span class="swatch" style="background:' + (COL[t.c] || '#475569') + '"></span>' +
+        '<select data-id="' + esc(t.id) + '" aria-label="Category for this transaction">' + catOptions(t.c) + '</select>' +
+        '<label class="also"><input type="checkbox" data-also="' + esc(t.id) + '"> Also all ' + esc(t.m) + '</label></div></td>' +
       '<td class="num ' + (t.f < 0 ? 'neg' : 'pos') + '">' + esc(fmt(t.f)) + '</td>' +
       '<td><button type="button" class="icon-btn" data-del="' + esc(t.id) + '" aria-label="Remove ' + esc(t.desc) + '">Remove</button></td>' +
       '</tr>'
@@ -482,37 +493,70 @@
       body + '</tbody></table></div>';
   }
 
-  function monthView(rows) {
-    const months = L.summarizeMonths(rows);
-    if (!months.length) return '<p class="panel-empty">No dated transactions in this view.</p>';
-    if (!S.selectedMonth || !months.some(m => m.month === S.selectedMonth)) {
-      S.selectedMonth = months[months.length - 1].month;
+  function renderMonths(rows) {
+    const host = $('#monthTree');
+    const detail = $('#monthDetail');
+    const years = L.monthsByYear(rows);
+    if (!years.length) {
+      host.innerHTML = '<p class="panel-empty">No dated transactions in this view.</p>';
+      detail.innerHTML = '';
+      return;
     }
-    const selected = months.find(m => m.month === S.selectedMonth);
-    const monthRows = rows.filter(t => t.date.startsWith(selected.month));
-    const monthSummary = L.summarize(monthRows);
-    const transfers = monthRows.filter(t => t.c === 'Transfers').length;
-    const cards = months.map(item => {
-      const active = item.month === selected.month ? ' active' : '';
-      return '<button type="button" class="month-card' + active + '" data-month="' + item.month + '">' +
-        '<span>' + esc(L.formatMonth(item.month, false)) + ' · ' + item.count + '</span>' +
-        '<span class="pos">In ' + esc(fmt(item.income)) + '</span>' +
-        '<span class="neg">Out ' + esc(fmt(item.spend)) + '</span>' +
-        '<strong>' + esc(fmt(L.round2(item.income - item.spend))) + '</strong></button>';
+    const known = years.some(year => year.months.some(item => item.month === S.selectedMonth));
+    if (!known) S.selectedMonth = years[0].months[0].month;
+    host.innerHTML = years.map(year => {
+      const open = year.months.some(item => item.month === S.selectedMonth) ? ' open' : '';
+      const list = year.months.map(item => {
+        const active = item.month === S.selectedMonth ? ' active' : '';
+        return '<button type="button" class="month-row' + active + '" data-month="' + item.month + '">' +
+          '<span>' + esc(L.monthTick(item.month, false)) + '</span>' +
+          '<span class="neg">Spend ' + esc(fmt(item.spend)) + '</span>' +
+          '<span class="pos">In ' + esc(fmt(item.income)) + '</span>' +
+          '<span>Saved ' + esc(fmt(item.savings)) + '</span>' +
+          '<strong>Net ' + esc(fmt(item.net)) + '</strong></button>';
+      }).join('');
+      return '<details class="year-block"' + open + '><summary><span>' + esc(year.year) + '</span>' +
+        '<span>Spend ' + esc(fmt(year.spend)) + '</span><span>Saved ' + esc(fmt(year.savings)) +
+        '</span><span>Net ' + esc(fmt(year.net)) + '</span></summary><div class="month-list">' + list + '</div></details>';
     }).join('');
+    const monthRows = rows.filter(t => String(t.date).startsWith(S.selectedMonth));
+    const monthSummary = L.summarize(monthRows);
+    const transfers = monthRows.filter(t => L.categoryRole(t.c) === 'transfer').length;
     const cats = monthSummary.categories.map(([name, value]) => {
       const share = monthSummary.totalSpend ? (value / monthSummary.totalSpend) * 100 : 0;
       return '<tr><td>' + esc((MARK[name] || '') + ' ' + name) + '</td><td class="num">' + esc(fmt(value)) +
         '</td><td class="num">' + share.toFixed(1) + '%</td></tr>';
     }).join('');
-    return '<div class="month-grid">' + cards + '</div>' +
-      '<div class="month-detail"><h3>' + esc(L.formatMonth(selected.month, true)) + '</h3>' +
-      '<p class="detail">' + monthRows.length + ' transactions' +
-      (transfers ? ', including ' + transfers + ' transfer' + (transfers === 1 ? '' : 's') + ' left out of the income and spending totals' : '') +
+    detail.innerHTML = '<h3>' + esc(L.formatMonth(S.selectedMonth, true)) + '</h3>' +
+      '<p class="detail">' + monthRows.length + ' transactions. Spending ' + esc(fmt(monthSummary.totalSpend)) +
+      ', income ' + esc(fmt(monthSummary.totalIncome)) +
+      ', savings ' + esc(fmt(monthSummary.totalSavings || 0)) +
+      ', net ' + esc(fmt(monthSummary.net)) +
+      (transfers ? '. ' + transfers + ' transfer' + (transfers === 1 ? '' : 's') + ' left out of those totals' : '') +
       '.</p>' +
-      '<div class="table-wrap"><table><thead><tr><th>Category</th><th class="num">Amount</th><th class="num">Share</th></tr></thead><tbody>' +
+      '<div class="table-wrap"><table><thead><tr><th>Category</th><th class="num">Spending</th><th class="num">Share</th></tr></thead><tbody>' +
       (cats || '<tr><td colspan="3">No spending this month.</td></tr>') +
-      '</tbody></table></div>' + txnTable(monthRows) + '</div>';
+      '</tbody></table></div>' + txnTable(monthRows);
+  }
+
+  function renderProjections(rows) {
+    const report = L.projections(rows, new Date());
+    const basis = report.basedOn.length
+      ? 'Monthly and yearly figures average ' + report.basedOn.map(month => L.formatMonth(month, false)).join(', ') + '.'
+      : 'Add a month before this one to estimate a monthly average.';
+    const pace = report.projectedMonthSpend == null
+      ? 'No spending recorded yet in ' + report.currentLabel + ', so the end-of-month pace is blank.'
+      : 'End-of-month pace uses day ' + report.elapsed + ' of ' + report.days + ' in ' + report.currentLabel + '.';
+    $('#projNote').textContent = 'Estimates, not actuals. ' + pace + ' ' + basis;
+    const shown = value => value == null ? '—' : fmt(value);
+    $('#projections').innerHTML = [
+      stat('spend', 'EOM spend', shown(report.projectedMonthSpend), 'Estimate from pace. So far ' + fmt(report.spentSoFar)),
+      stat('net', 'EOM savings', shown(report.projectedMonthSavings), 'Estimate from pace. So far ' + fmt(report.savedSoFar)),
+      stat('avg', 'Typical month', fmt(report.averageMonthSpend), 'Estimate. Recent average spending'),
+      stat('income', 'Typical savings', fmt(report.averageMonthSavings), 'Estimate. Recent average set aside'),
+      stat('spend', 'Year spending', fmt(report.projectedYearSpend), 'Estimate. Monthly average × 12'),
+      stat('net', 'Year savings', fmt(report.projectedYearSavings), 'Estimate. Monthly average × 12')
+    ].join('');
   }
 
   function renderPanel(rows, summary) {
@@ -523,7 +567,6 @@
     }
     if (S.view === 'mer') panel.innerHTML = merchantTable(rows);
     else if (S.view === 'cat') panel.innerHTML = categoryTable(rows, summary);
-    else if (S.view === 'month') panel.innerHTML = monthView(rows);
     else panel.innerHTML = txnTable(rows);
   }
 
@@ -593,6 +636,10 @@
         $('#catBars').innerHTML = '';
         $('#recur').innerHTML = '';
         $('#panel').innerHTML = '<p class="panel-empty">Add a transaction to compare these plans with real spending.</p>';
+        $('#monthTree').innerHTML = '';
+        $('#monthDetail').innerHTML = '';
+        $('#projections').innerHTML = '';
+        $('#projNote').textContent = '';
         $('#resultMeta').textContent = '';
         $('#modeHint').textContent = '';
       }
@@ -611,6 +658,7 @@
     renderStats(summary);
     renderInsights(summary);
     renderPlan(view.all);
+    renderProjections(view.filtered);
     renderCategories(summary.categories, summary.totalSpend);
     renderRecurring(summary.recurring);
     const warn = $('#filterWarn');
@@ -624,6 +672,7 @@
       : 'Showing ' + view.filtered.length + ' of ' + view.all.length + ' ' + noun + '.';
     syncTabs();
     drawChart(summary.months);
+    renderMonths(view.filtered);
     renderPanel(view.filtered, summary);
     const cat = $('#catFilter');
     if (document.activeElement !== cat) cat.value = S.cat;
@@ -694,11 +743,36 @@
 
   function addSample() {
     if (S.txns.length && !confirm('Add the built-in sample next to the transactions already saved on this device?')) return;
-    const result = addTransactions(L.SAMPLE_TXNS, 'sample data');
+    const result = addTransactions(L.SAMPLE_HISTORY, 'sample data');
     if (result.added) save();
     setMsg(result.added
       ? 'Added ' + result.added + ' sample transactions' + (result.dupes ? ' (' + result.dupes + ' already saved)' : '') + '.'
       : 'Sample transactions are already saved.', result.added ? 'ok' : 'warn');
+    refresh();
+  }
+
+  function applyCategory(sel, forceAll) {
+    if (!sel) return;
+    const txn = S.txns.find(t => t.id === sel.dataset.id);
+    const value = L.canonicalCategory(sel.value);
+    if (!txn || !value) return;
+    const box = sel.parentElement.querySelector('input[data-also]');
+    const all = forceAll || (box && box.checked);
+    if (all) {
+      const merchant = txn.m;
+      S.rules[merchant] = value;
+      let count = 0;
+      S.txns.forEach(item => {
+        if (item.m !== merchant) return;
+        delete item.oc;
+        count += 1;
+      });
+      setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + merchant + '.', 'ok');
+    } else {
+      txn.oc = value;
+      setMsg('Changed this transaction only. Check “Also all ' + txn.m + '” to update the others.', 'ok');
+    }
+    save();
     refresh();
   }
 
@@ -896,25 +970,26 @@
       toggleCategory(bar.dataset.cat);
     });
 
-    $('#panel').addEventListener('click', e => {
+    $('#dashboard').addEventListener('click', e => {
       const del = e.target.closest('[data-del]');
       if (del) { removeTxn(del.dataset.del); return; }
       const month = e.target.closest('[data-month]');
       if (month) { S.selectedMonth = month.dataset.month; save(); refresh(); return; }
       const th = e.target.closest('th[data-sort]');
-      if (th) {
-        const key = th.dataset.sort;
-        S.sd = S.sk === key ? -S.sd : 1;
-        S.sk = key;
-        refresh();
-      }
-    });
-    $('#panel').addEventListener('change', e => {
-      const sel = e.target.closest('select[data-rule]');
-      if (!sel) return;
-      S.rules[sel.dataset.rule] = sel.value;
-      save();
+      if (!th || !th.closest('#panel, #monthDetail')) return;
+      const key = th.dataset.sort;
+      S.sd = S.sk === key ? -S.sd : 1;
+      S.sk = key;
       refresh();
+    });
+    $('#dashboard').addEventListener('change', e => {
+      const box = e.target.closest('input[data-also]');
+      if (box) {
+        applyCategory(box.closest('.cat-cell').querySelector('select[data-id]'), true);
+        return;
+      }
+      const sel = e.target.closest('select[data-id]');
+      if (sel) applyCategory(sel, false);
     });
 
     $('#addForm').addEventListener('submit', e => {
@@ -957,9 +1032,13 @@
     const cat = $('#catFilter');
     cat.innerHTML = '<option value="">All categories</option>' + catOptions('');
     const budgetCat = $('#budgetCategory');
-    budgetCat.innerHTML = L.spendCategoryNames().map(name =>
-      '<option value="' + esc(name) + '">' + esc((MARK[name] || '') + ' ' + name) + '</option>'
-    ).join('');
+    budgetCat.innerHTML = L.categoryGroups().map(group => {
+      const cats = group.categories.filter(c => c.role === 'spend');
+      if (!cats.length) return '';
+      return '<optgroup label="' + esc(group.name) + '">' + cats.map(c =>
+        '<option value="' + esc(c.name) + '">' + esc(c.mark + ' ' + c.label) + '</option>'
+      ).join('') + '</optgroup>';
+    }).join('');
     bind();
     refresh();
   }

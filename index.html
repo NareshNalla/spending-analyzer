@@ -110,7 +110,7 @@
           <h3>Income and spending by month</h3>
           <div class="chart-box"><canvas id="monthChart" aria-label="Monthly income and spending" role="img"></canvas></div>
           <div class="chart-fallback" id="chartFallback" hidden></div>
-          <div class="legend"><span><b class="pos">Income</b> excluding transfers</span><span><b class="neg">Spending</b> excluding transfers</span></div>
+          <div class="legend"><span><b class="pos">Income</b> excluding transfers</span><span><b class="neg">Spending</b> excluding transfers and savings</span><span><b class="save">Savings</b> set aside</span></div>
         </section>
         <section class="card">
           <h3>Spending by category</h3>
@@ -118,6 +118,19 @@
           <div class="cat-list" id="catBars"></div>
         </section>
       </div>
+
+      <section class="card" id="projCard" aria-label="Projections">
+        <h3>Projections</h3>
+        <p class="detail" id="projNote">Estimates, not actuals.</p>
+        <div class="proj-grid" id="projections"></div>
+      </section>
+
+      <section class="card" id="monthSection" aria-label="Months by year">
+        <h3>Months</h3>
+        <p class="detail">Grouped by year, newest first. Open a month for its transactions and categories. Savings is money moved to savings or investments, not an expense.</p>
+        <div id="monthTree"></div>
+        <div id="monthDetail"></div>
+      </section>
 
       <section class="card" id="recurCard">
         <h3>Repeating spend</h3>
@@ -129,7 +142,6 @@
         <button type="button" class="tab active" data-view="tx" role="tab" aria-selected="true">Transactions</button>
         <button type="button" class="tab" data-view="mer" role="tab" aria-selected="false">Merchants</button>
         <button type="button" class="tab" data-view="cat" role="tab" aria-selected="false">Categories</button>
-        <button type="button" class="tab" data-view="month" role="tab" aria-selected="false">Months</button>
       </div>
 
       <div class="tools">

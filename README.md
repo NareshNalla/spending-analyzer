@@ -10,11 +10,15 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Import CSV files and text bank-statement PDFs
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
-- Dashboard with a monthly chart, category bars, and a month-by-month view
+- Dashboard with a monthly chart, category bars, and a year-then-month view
 - Search, plus date, amount, and category filters
 - List merchants that show up in more than one month
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
 - Savings goals with a target, amount saved, optional deadline, and progress
+- Spending and savings projections, labeled as estimates
+- A Savings category for money moved to savings or investments, kept out of spending
+- Change one transaction’s category without changing the rest, or check “Also all {merchant}” to update every row from that merchant
+- Categories for housing, utilities, household help, food, transport, family, education, health, loans, and savings, including common Indian descriptions. Older names such as Groceries and Housing still work
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
 - Built-in sample data so you can try it with no statement
@@ -24,6 +28,10 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 ![Dashboard with sample income, spending, budgets, and a savings goal](docs/screenshots/dashboard.png)
 
 ![Monthly budgets and a savings goal](docs/screenshots/budgets.png)
+
+![Months grouped by year](docs/screenshots/months.png)
+
+![Spending and savings projections](docs/screenshots/projections.png)
 
 ![Dark theme](docs/screenshots/dark.png)
 
@@ -48,7 +56,7 @@ Then open `http://127.0.0.1:8765/`.
 1. Drop a statement on the importer, press Enter on that box to choose files, or **Load sample data**.
 2. Check the amount style in the header. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
-4. Add a monthly budget or a savings goal on the dashboard. Budgets compare with the latest month in your data, or with the single month selected in the date filters.
+4. Add a monthly budget or a savings goal on the dashboard. Budgets compare with the latest month in your data, or with the single month selected in the date filters. Changing a category updates that row only, unless you check “Also all” for that merchant.
 5. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
 ### CSV files
