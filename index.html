@@ -25,7 +25,12 @@
       <label>Month
         <select id="periodMonth" aria-label="Month"></select>
       </label>
-      <p class="detail" id="periodHint">Choose a year and month. The rest of the page uses only that month.</p>
+      <div class="main-tabs" role="tablist" aria-label="Sections">
+        <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
+        <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
+        <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
+      </div>
+      <p class="detail" id="periodHint">Choose a year and month. Totals, categories, transactions, projections, budgets, and savings use only that month.</p>
     </div>
     <header class="header">
       <div>
@@ -71,13 +76,12 @@
     </section>
 
     <section id="dashboard" hidden>
-      <div class="main-tabs" role="tablist" aria-label="Sections">
-        <button type="button" class="tab section-tab active" data-section="spend" role="tab" aria-selected="true">Spending</button>
-        <button type="button" class="tab section-tab" data-section="budgets" role="tab" aria-selected="false">Monthly budgets</button>
-        <button type="button" class="tab section-tab" data-section="goals" role="tab" aria-selected="false">Savings goals</button>
-      </div>
-
       <div id="sectionSpend">
+      <section class="card" id="monthSection" aria-label="Months by year">
+        <h3>Months</h3>
+        <p class="detail" id="monthIntro">The selected year, then its months, newest first. Choose a month to update the categories, transactions, and other figures below.</p>
+        <div id="monthTree"></div>
+      </section>
       <p class="meta" id="modeHint"></p>
       <div class="stats" id="stats"></div>
       <div class="insights" id="insights"></div>
