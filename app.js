@@ -435,22 +435,6 @@
       const savings = months.map(m => m.savings || 0);
       canvas.hidden = false;
       fallback.hidden = true;
-      if (chart && chart.data.datasets.length === 3) {
-        chart.data.labels = labels;
-        chart.data.datasets[0].data = income;
-        chart.data.datasets[0].backgroundColor = colors.income;
-        chart.data.datasets[1].data = spend;
-        chart.data.datasets[1].backgroundColor = colors.spend;
-        chart.data.datasets[2].data = savings;
-        chart.data.datasets[2].backgroundColor = colors.save;
-        chart.options.plugins.legend.labels.color = colors.text;
-        chart.options.scales.x.ticks.color = colors.text;
-        chart.options.scales.y.ticks.color = colors.text;
-        chart.options.scales.y.grid.color = colors.grid;
-        chart.update();
-        chart.resize();
-        return;
-      }
       if (chart) { chart.destroy(); chart = null; }
       chart = new window.Chart(canvas, {
         type: 'bar',
@@ -900,6 +884,8 @@
       count += 1;
     });
     setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + merchant + '.', 'ok');
+    planSig = '';
+    if (chart) { chart.destroy(); chart = null; }
     save();
     refresh();
   }
