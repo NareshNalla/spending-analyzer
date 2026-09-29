@@ -564,21 +564,25 @@
       host.innerHTML = '<p class="panel-empty">No months in this year.</p>';
       return;
     }
-    host.innerHTML = years.map(year => {
-      const list = year.months.map(item => {
-        const active = item.month === S.selectedMonth ? ' active' : '';
-        const label = L.formatMonth(item.month, true).replace(/ \d{4}$/, '');
-        return '<button type="button" class="month-row' + active + '" data-month="' + item.month + '">' +
-          '<span>' + esc(label) + '</span>' +
-          '<span class="neg">Spend ' + esc(fmt(item.spend)) + '</span>' +
-          '<span class="pos">In ' + esc(fmt(item.income)) + '</span>' +
-          '<span>Saved ' + esc(fmt(item.savings)) + '</span>' +
-          '<strong>Net ' + esc(fmt(item.net)) + '</strong></button>';
-      }).join('');
-      return '<div class="year-block"><div class="year-head"><span>' + esc(year.year) + '</span>' +
-        '<span>Spend ' + esc(fmt(year.spend)) + '</span><span>Saved ' + esc(fmt(year.savings)) +
-        '</span><span>Net ' + esc(fmt(year.net)) + '</span></div><div class="month-list">' + list + '</div></div>';
-    }).join('');
+    const cells = (name, spend, income, savings, net) =>
+      '<th scope="row">' + esc(name) + '</th>' +
+      '<td class="num neg">Spend ' + esc(fmt(spend)) + '</td>' +
+      '<td class="num pos">In ' + esc(fmt(income)) + '</td>' +
+      '<td class="num">Saved ' + esc(fmt(savings)) + '</td>' +
+      '<td class="num">Net ' + esc(fmt(net)) + '</td>';
+    host.innerHTML = '<div class="month-scroll"><table class="month-table"><thead><tr>' +
+      '<th scope="col">Month</th><th scope="col" class="num">Spend</th><th scope="col" class="num">In</th>' +
+      '<th scope="col" class="num">Saved</th><th scope="col" class="num">Net</th></tr></thead><tbody>' +
+      years.map(year => {
+        const summary = '<tr class="year-head">' + cells(year.year, year.spend, year.income, year.savings, year.net) + '</tr>';
+        const list = year.months.map(item => {
+          const active = item.month === S.selectedMonth;
+          const label = L.formatMonth(item.month, true).replace(/ \d{4}$/, '');
+          return '<tr class="month-row' + (active ? ' active' : '') + '" data-month="' + item.month + '" tabindex="0" role="button" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+            cells(label, item.spend, item.income, item.savings, item.net) + '</tr>';
+        }).join('');
+        return summary + list;
+      }).join('') + '</tbody></table></div>';
   }
 
   function projectionNote(report) {
@@ -1062,6 +1066,13 @@
       planSig = '';
       save();
       refresh();
+    });
+    $('#monthSection').addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const month = e.target.closest('[data-month]');
+      if (!month) return;
+      e.preventDefault();
+      month.click();
     });
     $('#loadSample').addEventListener('click', addSample);
     $('#loadSampleMore').addEventListener('click', addSample);
