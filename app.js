@@ -43,6 +43,13 @@
     return money.format(Number.isFinite(n) ? n : 0);
   }
 
+  function amountTone(category) {
+    const role = L.categoryRole(category);
+    if (role === 'income') return 'pos';
+    if (role === 'spend') return 'neg';
+    return '';
+  }
+
   function setMsg(text, kind) {
     const el = $('#msg');
     el.textContent = text;
@@ -309,7 +316,7 @@
       insight('Top category', top ? (MARK[top.name] || '') + ' ' + top.name : '—', top ? fmt(top.amount) : 'No spending in this view'),
       insight('Biggest merchant', merchant ? merchant.name : '—', merchant ? fmt(merchant.amount) + ' spent' : 'Spending only, not deposits'),
       insight('Savings set aside', fmt(summary.totalSavings || 0), 'Moved to savings or investments, not counted as spending'),
-      insight('Largest purchase', largest ? fmt(-largest.f) : '—', largest ? largest.desc : 'No purchases in this view')
+      insight('Largest purchase', largest ? fmt(Math.abs(largest.f)) : '—', largest ? largest.desc : 'No purchases in this view')
     ].join('');
   }
 
@@ -459,7 +466,7 @@
       '<td class="merchant">' + esc(t.m) + '</td>' +
       '<td><div class="cat-cell"><span class="swatch" style="background:' + (COL[t.c] || '#475569') + '"></span>' +
         '<select data-id="' + esc(t.id) + '" aria-label="Category for this transaction">' + catOptions(t.c) + '</select></div></td>' +
-      '<td class="num ' + (t.f < 0 ? 'neg' : 'pos') + '">' + esc(fmt(t.f)) + '</td>' +
+      '<td class="num ' + amountTone(t.c) + '">' + esc(fmt(Math.abs(t.f))) + '</td>' +
       '<td><button type="button" class="icon-btn" data-del="' + esc(t.id) + '" aria-label="Remove ' + esc(t.desc) + '">Remove</button></td>' +
       '</tr>'
     ).join('');
@@ -480,7 +487,7 @@
     })).sort((a, b) => a.net - b.net);
     const body = list.map(o =>
       '<tr><td>' + esc(o.m) + '</td><td>' + esc((MARK[o.c] || '') + ' ' + o.c) + '</td>' +
-      '<td class="num">' + o.n + '</td><td class="num ' + (o.net < 0 ? 'neg' : 'pos') + '">' + esc(fmt(o.net)) + '</td></tr>'
+      '<td class="num">' + o.n + '</td><td class="num ' + amountTone(o.c) + '">' + esc(fmt(Math.abs(o.net))) + '</td></tr>'
     ).join('');
     return '<div class="table-wrap"><table><thead><tr><th>Merchant</th><th>Category</th><th class="num">Count</th><th class="num">Net</th></tr></thead><tbody>' +
       body + '</tbody></table></div>';
