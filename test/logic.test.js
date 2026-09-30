@@ -413,6 +413,18 @@ test('a category on one transaction does not change the merchant rule', () => {
   assert.equal(migrated.txns[0].oc, 'Entertainment');
   assert.equal(migrated.txns[1].oc, undefined);
   assert.equal(migrated.rules.Netflix, 'Subscriptions');
+
+  const renamed = L.migrate(
+    [{ id: 'rent-old', date: '2026-09-15', desc: 'RENT PAYMENT', raw: -1450, m: 'Rent Payment' }],
+    { 'Rent Payment': 'Education', Rent: 'Housing' }
+  );
+  assert.equal(renamed.txns[0].m, 'Rent');
+  assert.equal(renamed.txns[0].oc, 'Education');
+  assert.equal(renamed.rules['Rent Payment'], 'Education');
+  assert.equal(L.categoryOf(renamed.txns[0], renamed.rules), 'Education');
+  const again = L.migrate(renamed.txns, renamed.rules);
+  assert.equal(again.txns[0].oc, 'Education');
+  assert.equal(L.categoryOf(again.txns[0], again.rules), 'Education');
 });
 
 test('savings and credit-card bills are not spending', () => {

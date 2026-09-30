@@ -17,7 +17,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Savings goals with a target, amount saved, optional deadline, and progress
 - Spending and savings projections on their own tab, labeled as estimates, and scoped to the selected month
 - A Savings category for money moved to savings or investments, kept out of spending
-- Changing a transaction’s category updates every saved row from that same merchant and keeps the choice for later imports. A different merchant is left alone
+- Changing a transaction’s category updates every saved row from that same merchant and keeps the choice for later imports. The choice is stored in `spend_v3` on those transactions and as a merchant rule, so a reload keeps it. A different merchant is left alone
 - Categories for housing, utilities, household help, food, transport (including parking, car lease, and electric car charging), family (including separate Pooja, Devotional, and Festival choices), education, health, loans (including Car EMI and a general EMI), savings, subscriptions (Netflix, Spotify, Prime, Hotstar, YouTube, iCloud, Google One, and gym membership), personal care (Haircut for haircut, hair care, salon, and barber; Body care for body care, spa, and grooming), and lend or borrow, including common Indian descriptions. Older names such as Groceries and Housing still work. Lend and Borrow sit together and are left out of spending and income, the same way transfers are. A Zelle or UPI payment stays a transfer unless the description says lend or borrow
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
