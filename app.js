@@ -792,15 +792,21 @@
     const txn = S.txns.find(t => t.id === sel.dataset.id);
     const value = L.canonicalCategory(sel.value);
     if (!txn || !value) return;
-    const merchant = txn.m;
-    S.rules[merchant] = value;
+    const computed = L.merchant(txn.desc || '');
+    const merchant = txn.m || computed;
+    if (merchant) S.rules[merchant] = value;
+    if (computed && computed !== merchant) S.rules[computed] = value;
     let count = 0;
     S.txns.forEach(item => {
-      if (item.m !== merchant) return;
-      delete item.oc;
+      const itemComputed = L.merchant(item.desc || '');
+      const same = (merchant && (item.m === merchant || itemComputed === merchant)) ||
+        (computed && itemComputed === computed);
+      if (!same) return;
+      item.oc = value;
+      if (!item.m && itemComputed) item.m = itemComputed;
       count += 1;
     });
-    setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + merchant + '.', 'ok');
+    setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + (merchant || 'this row') + '.', 'ok');
     planSig = '';
     if (chart) { chart.destroy(); chart = null; }
     save();

@@ -1135,8 +1135,13 @@
       const old = t.m;
       if (old && old !== m && nextRules[old] && !nextRules[m]) nextRules[m] = nextRules[old];
       const id = t.id || uid();
-      const own = canonicalCategory(t.oc);
+      // Keep a category that was saved on the row. If this row's merchant name
+      // is about to change and that old name has a rule, keep it on the row so
+      // a different rule on the new name cannot replace the saved choice.
+      let own = canonicalCategory(t.oc) || canonicalCategory(t.category);
+      if (!own && old && old !== m && nextRules[old]) own = canonicalCategory(nextRules[old]);
       const next = { ...t, id, m };
+      delete next.category;
       if (own) next.oc = own;
       else delete next.oc;
       return next;
