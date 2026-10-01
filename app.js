@@ -1216,7 +1216,8 @@
       const sel = e.target.closest('select[data-id]');
       if (!sel) return;
       if (sel.value === '__new__') {
-        sel.value = sel.dataset.prev || '';
+        const txn = S.txns.find(t => t.id === sel.dataset.id);
+        sel.value = sel.dataset.prev || (txn ? L.categoryOf(txn, S.rules) : '');
         openCustomForm('txn', sel.dataset.id);
         return;
       }
