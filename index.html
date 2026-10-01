@@ -6,7 +6,7 @@
   <title>Spending Analyzer</title>
   <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233730a3'/%3E%3Cpath d='M8 22h16M8 16h10M8 10h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
   <script>
     try {
       var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
@@ -43,8 +43,8 @@
     </section>
 
     <div class="period-bar" id="periodBar" hidden>
-      <label>Year
-        <select id="periodYear" aria-label="Year"></select>
+      <label class="year-field">Year
+        <input id="periodYear" type="number" inputmode="numeric" min="1970" max="2100" step="1" aria-label="Year">
       </label>
       <label>Month
         <select id="periodMonth" aria-label="Month"></select>
@@ -74,8 +74,16 @@
         </section>
         <section class="card">
           <h3>Spending by category</h3>
-          <p class="detail">Click a category to filter the list.</p>
+          <p class="detail">Click a category to filter the list. Add your own with a name and an icon.</p>
           <div class="cat-list" id="catBars"></div>
+          <form class="custom-cat" id="customCatForm">
+            <h4>Your categories</h4>
+            <label>Name <input name="name" maxlength="40" placeholder="Pet care" autocomplete="off"></label>
+            <div class="icon-pick" id="iconPick" role="group" aria-label="Icon"></div>
+            <button type="submit" class="primary">Add category</button>
+            <p class="error" id="customCatError" role="status"></p>
+          </form>
+          <ul class="custom-list" id="customList"></ul>
         </section>
       </div>
 
@@ -103,12 +111,10 @@
           <label>Date <input type="date" name="date" required></label>
           <label>Description <input name="desc" required maxlength="200" placeholder="Kroger, rent, payroll" autocomplete="off"></label>
           <label>Amount <input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
-          <label>Kind
-            <select name="kind">
-              <option value="spend">Spending</option>
-              <option value="income">Income</option>
-            </select>
+          <label>Category
+            <select name="category" id="addCategory" required></select>
           </label>
+          <button type="button" id="newCategoryFromAdd">New category</button>
           <button type="submit" class="primary">Add</button>
           <p class="error" id="addError" role="status"></p>
         </form>
@@ -195,7 +201,7 @@
   </div>
 
   <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
-  <script src="logic.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="logic.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

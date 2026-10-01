@@ -84,6 +84,8 @@ h3 { font-size: 0.95rem; letter-spacing: 0; }
   color: var(--mut);
 }
 .period-bar select { min-width: 11rem; }
+.period-bar label.year-field { min-width: 0; }
+.period-bar input[type="number"] { width: 6.5rem; }
 .period-bar .detail { margin: 0; flex: 1 1 100%; }
 .main-tabs {
   display: flex;
@@ -292,11 +294,39 @@ input[type="search"] { width: 100%; }
 
 .add-form {
   display: grid;
-  grid-template-columns: 150px 1fr 120px 140px auto;
+  grid-template-columns: 150px minmax(0, 1fr) 120px minmax(140px, 1fr) auto auto;
   gap: 10px;
   align-items: end;
   margin-top: 10px;
 }
+.custom-cat {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.custom-cat h4 { font-size: 0.85rem; }
+.custom-cat label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mut);
+}
+.icon-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.icon-choice {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 4px 8px;
+  font-size: 1.15rem;
+  background: var(--bg);
+}
+.icon-choice.is-on { border-color: var(--ac); background: var(--ac-soft); }
+.custom-list { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.custom-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.custom-row input { flex: 1 1 8rem; }
+.custom-row select { width: 4.5rem; }
+.custom-cat .error { color: var(--neg); font-size: 13px; margin: 0; }
 .add-form .error, #planError, #goalError { grid-column: 1 / -1; color: var(--neg); font-size: 13px; }
 .plan-form {
   display: grid;

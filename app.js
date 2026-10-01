@@ -3,9 +3,6 @@
 
   const L = window.SpendLogic;
   const $ = s => document.querySelector(s);
-  const CATS = L.categories();
-  const COL = Object.fromEntries(CATS.map(c => [c.name, c.color]));
-  const MARK = Object.fromEntries(CATS.map(c => [c.name, c.mark]));
   const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
   const S = {
@@ -22,7 +19,8 @@
     section: 'spend',
     budgets: {},
     goals: [],
-    similar: []
+    similar: [],
+    custom: []
   };
 
   let chart = null;
@@ -32,6 +30,8 @@
   let toastTimer = null;
   let undo = null;
   let planSig = '';
+  let pickedIcon = '';
+  let pendingCategory = null;
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -41,6 +41,16 @@
 
   function fmt(n) {
     return money.format(Number.isFinite(n) ? n : 0);
+  }
+
+  function colorOf(name) {
+    const hit = L.categories().find(c => c.name === name);
+    return hit ? hit.color : '#475569';
+  }
+
+  function markOf(name) {
+    const hit = L.categories().find(c => c.name === name);
+    return hit ? hit.mark : '';
   }
 
   function amountTone(category) {
@@ -71,7 +81,8 @@
       v: S.view,
       b: S.budgets,
       g: S.goals,
-      sr: S.similar
+      sr: S.similar,
+      cc: S.custom
     };
   }
 
@@ -86,6 +97,7 @@
   }
 
   function applyPayload(d) {
+    S.custom = L.setCustomCategories(d.cc || []);
     const migrated = L.migrate(d.t || [], d.r || {});
     S.txns = migrated.txns;
     S.rules = migrated.rules;
@@ -116,7 +128,8 @@
     const rulesChanged = JSON.stringify(d.r || {}) !== JSON.stringify(S.rules);
     const storedMax = d.amx == null || d.amx === '' ? null : Number(d.amx);
     const filtersSet = !!(d.f || d.to || Number(d.amn) || (storedMax != null && storedMax !== 999999));
-    if (merchantsChanged || rulesChanged || filtersSet) save();
+    const customChanged = JSON.stringify(d.cc || []) !== JSON.stringify(S.custom);
+    if (merchantsChanged || rulesChanged || filtersSet || customChanged) save();
   }
 
   function applyTheme(pref) {
@@ -142,12 +155,18 @@
   }
 
   function ensurePeriod() {
-    const months = periodMonths();
-    if (!months.length) {
-      S.selectedMonth = '';
+    const kept = L.validPeriod(S.selectedMonth);
+    if (kept) {
+      S.selectedMonth = kept;
       return;
     }
-    if (!months.includes(S.selectedMonth)) S.selectedMonth = L.defaultPeriod(months, new Date());
+    const months = periodMonths();
+    if (months.length) {
+      S.selectedMonth = L.defaultPeriod(months, new Date());
+      return;
+    }
+    const now = new Date();
+    S.selectedMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   }
 
   function periodBounds() {
@@ -179,14 +198,33 @@
       }
       seen.add(key);
       const m = L.merchant(desc);
-      S.txns.push({ id: L.uid(), date: r.date, desc, raw: r.raw, m, file: sourceName || '' });
-      if (r.category && !S.rules[m]) {
-        const known = L.canonicalCategory(r.category);
-        if (known) S.rules[m] = known;
-      }
+      const known = r.category ? L.canonicalCategory(r.category) : null;
+      const row = { id: L.uid(), date: r.date, desc, raw: r.raw, m, file: sourceName || '' };
+      if (known && r.assign) row.oc = known;
+      S.txns.push(row);
+      if (known && r.assign) assignMerchantCategory(row, known);
+      else if (known && !S.rules[m]) S.rules[m] = known;
       added++;
     });
     return { added, dupes };
+  }
+
+  function assignMerchantCategory(txn, value) {
+    const computed = L.merchant(txn.desc || '');
+    const merchant = txn.m || computed;
+    if (merchant) S.rules[merchant] = value;
+    if (computed && computed !== merchant) S.rules[computed] = value;
+    let count = 0;
+    S.txns.forEach(item => {
+      const itemComputed = L.merchant(item.desc || '');
+      const same = (merchant && (item.m === merchant || itemComputed === merchant)) ||
+        (computed && itemComputed === computed);
+      if (!same) return;
+      item.oc = value;
+      if (!item.m && itemComputed) item.m = itemComputed;
+      count += 1;
+    });
+    return { count, merchant: merchant || computed };
   }
 
   function loadScript(src) {
@@ -313,7 +351,7 @@
     const merchant = summary.topMerchant;
     const largest = summary.largest;
     $('#insights').innerHTML = [
-      insight('Top category', top ? (MARK[top.name] || '') + ' ' + top.name : '—', top ? fmt(top.amount) : 'No spending in this view'),
+      insight('Top category', top ? (markOf(top.name) + ' ' + top.name).trim() : '—', top ? fmt(top.amount) : 'No spending in this view'),
       insight('Biggest merchant', merchant ? merchant.name : '—', merchant ? fmt(merchant.amount) + ' spent' : 'Spending only, not deposits'),
       insight('Savings set aside', fmt(summary.totalSavings || 0), 'Moved to savings or investments, not counted as spending'),
       insight('Largest purchase', largest ? fmt(Math.abs(largest.f)) : '—', largest ? largest.desc : 'No purchases in this view')
@@ -335,9 +373,9 @@
       const share = total ? (value / total) * 100 : 0;
       const on = S.cat === name ? ' is-on' : '';
       return '<button type="button" class="bar' + on + '" data-cat="' + esc(name) + '">' +
-        '<span class="swatch" style="background:' + COL[name] + '"></span>' +
-        '<span class="bar-name">' + esc((MARK[name] || '') + ' ' + name) + '</span>' +
-        '<span class="track"><span class="fill" style="width:' + Math.max(2, (value / max) * 100) + '%;background:' + COL[name] + '"></span></span>' +
+        '<span class="swatch" style="background:' + colorOf(name) + '"></span>' +
+        '<span class="bar-name">' + esc((markOf(name) + ' ' + name).trim()) + '</span>' +
+        '<span class="track"><span class="fill" style="width:' + Math.max(2, (value / max) * 100) + '%;background:' + colorOf(name) + '"></span></span>' +
         '<span class="bar-amt">' + esc(fmt(value)) + '</span>' +
         '<span class="bar-pct">' + share.toFixed(0) + '%</span></button>';
     }).join('');
@@ -373,7 +411,7 @@
       if (chart) { chart.destroy(); chart = null; }
       canvas.hidden = true;
       fallback.hidden = false;
-      fallback.textContent = 'No income or spending in the current filters.';
+      fallback.textContent = 'No income or spending in this month.';
       return;
     }
     loadChart().then(() => {
@@ -420,13 +458,126 @@
     });
   }
 
-  function catOptions(selected) {
+  function groupedOptions(filter, selected) {
     return L.categoryGroups().map(group => {
-      const options = group.categories.map(c =>
+      const cats = filter ? group.categories.filter(filter) : group.categories;
+      if (!cats.length) return '';
+      const options = cats.map(c =>
         '<option value="' + esc(c.name) + '"' + (c.name === selected ? ' selected' : '') + '>' +
         esc(c.mark + ' ' + c.label) + '</option>').join('');
       return '<optgroup label="' + esc(group.name) + '">' + options + '</optgroup>';
     }).join('');
+  }
+
+  function catOptions(selected) {
+    return groupedOptions(null, selected) + '<option value="__new__">New category…</option>';
+  }
+
+  function fillCategorySelects() {
+    const budget = $('#budgetCategory');
+    if (budget && document.activeElement !== budget) {
+      const prev = budget.value;
+      budget.innerHTML = groupedOptions(c => c.role === 'spend');
+      if ([...budget.options].some(option => option.value === prev)) budget.value = prev;
+    }
+    const add = $('#addCategory');
+    if (add && document.activeElement !== add) {
+      const prev = add.value;
+      add.innerHTML = '<option value="">Choose a category</option>' + groupedOptions() +
+        '<option value="__new__">New category…</option>';
+      if ([...add.options].some(option => option.value === prev)) add.value = prev;
+    }
+  }
+
+  function renderIconPick() {
+    const host = $('#iconPick');
+    if (!host || host.childElementCount) return;
+    const icons = L.customIcons();
+    pickedIcon = icons[0] || '';
+    host.innerHTML = icons.map((icon, index) =>
+      '<button type="button" class="icon-choice' + (index === 0 ? ' is-on' : '') + '" data-pick-icon="' + icon + '" aria-pressed="' + (index === 0 ? 'true' : 'false') + '" aria-label="Icon ' + icon + '">' + icon + '</button>'
+    ).join('');
+  }
+
+  function selectIcon(icon) {
+    if (!L.customIcons().includes(icon)) return;
+    pickedIcon = icon;
+    document.querySelectorAll('[data-pick-icon]').forEach(btn => {
+      const on = btn.dataset.pickIcon === icon;
+      btn.classList.toggle('is-on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function renderCustomCategories() {
+    const host = $('#customList');
+    if (!host || host.contains(document.activeElement)) return;
+    if (!S.custom.length) {
+      host.innerHTML = '<li class="detail">None yet. Add a name and an icon.</li>';
+      return;
+    }
+    host.innerHTML = S.custom.map(cat => {
+      const icons = L.customIcons().map(icon =>
+        '<option value="' + icon + '"' + (icon === cat.icon ? ' selected' : '') + '>' + icon + '</option>'
+      ).join('');
+      return '<li class="custom-row">' +
+        '<select data-custom-icon="' + esc(cat.name) + '" aria-label="Icon for ' + esc(cat.name) + '">' + icons + '</select>' +
+        '<input data-custom-name="' + esc(cat.name) + '" aria-label="Name for ' + esc(cat.name) + '" maxlength="40" value="' + esc(cat.name) + '">' +
+        '<button type="button" data-delete-custom="' + esc(cat.name) + '">Delete</button></li>';
+    }).join('');
+  }
+
+  function prefillAddDate() {
+    const input = document.querySelector('#addForm [name="date"]');
+    if (!input || input.value || document.activeElement === input) return;
+    if (!L.validPeriod(S.selectedMonth)) return;
+    const now = new Date();
+    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    input.value = S.selectedMonth === current
+      ? current + '-' + String(now.getDate()).padStart(2, '0')
+      : S.selectedMonth + '-01';
+  }
+
+  function syncAddDateToPeriod() {
+    const input = document.querySelector('#addForm [name="date"]');
+    if (!input || document.activeElement === input) return;
+    const now = new Date();
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const value = input.value;
+    if (value && value.slice(0, 7) === S.selectedMonth) return;
+    if (value && !value.endsWith('-01') && value !== today) return;
+    input.value = '';
+    prefillAddDate();
+  }
+
+  function openCustomForm(kind, id) {
+    pendingCategory = { kind, id: id || '' };
+    if (S.section !== 'spend') {
+      S.section = 'spend';
+      save();
+    }
+    syncTabs();
+    const form = $('#customCatForm');
+    if (!form) return;
+    form.scrollIntoView({ block: 'center' });
+    const name = form.elements.name;
+    if (name) name.focus();
+  }
+
+  function applyCustomUpdate(updated) {
+    S.custom = L.setCustomCategories(updated.categories);
+    if (updated.from !== updated.to) {
+      const rewritten = L.reassignCategory(S.txns, S.rules, S.similar, S.budgets, updated.from, updated.to, false);
+      S.txns = rewritten.txns;
+      S.rules = rewritten.rules;
+      S.similar = rewritten.similar;
+      S.budgets = rewritten.budgets;
+      if (S.cat === updated.from) S.cat = updated.to;
+    }
+    $('#customCatError').textContent = '';
+    planSig = '';
+    save();
+    refresh();
   }
 
   function sortRows(rows) {
@@ -464,7 +615,7 @@
       '<td>' + esc(t.date) + '</td>' +
       '<td class="desc" title="' + esc(t.file || '') + '">' + esc(t.desc) + '</td>' +
       '<td class="merchant">' + esc(t.m) + '</td>' +
-      '<td><div class="cat-cell"><span class="swatch" style="background:' + (COL[t.c] || '#475569') + '"></span>' +
+      '<td><div class="cat-cell"><span class="swatch" style="background:' + colorOf(t.c) + '"></span>' +
         '<select data-id="' + esc(t.id) + '" aria-label="Category for this transaction">' + catOptions(t.c) + '</select></div></td>' +
       '<td class="num ' + amountTone(t.c) + '">' + esc(fmt(Math.abs(t.f))) + '</td>' +
       '<td><button type="button" class="icon-btn" data-del="' + esc(t.id) + '" aria-label="Remove ' + esc(t.desc) + '">Remove</button></td>' +
@@ -486,7 +637,7 @@
       c: Object.entries(item.cats).sort((a, b) => b[1] - a[1])[0][0]
     })).sort((a, b) => a.net - b.net);
     const body = list.map(o =>
-      '<tr><td>' + esc(o.m) + '</td><td>' + esc((MARK[o.c] || '') + ' ' + o.c) + '</td>' +
+      '<tr><td>' + esc(o.m) + '</td><td>' + esc((markOf(o.c) + ' ' + o.c).trim()) + '</td>' +
       '<td class="num">' + o.n + '</td><td class="num ' + amountTone(o.c) + '">' + esc(fmt(Math.abs(o.net))) + '</td></tr>'
     ).join('');
     return '<div class="table-wrap"><table><thead><tr><th>Merchant</th><th>Category</th><th class="num">Count</th><th class="num">Net</th></tr></thead><tbody>' +
@@ -499,7 +650,7 @@
     if (!summary.categories.length) return '<p class="panel-empty">No spending categories in this view.</p>';
     const body = summary.categories.map(([name, value]) => {
       const share = summary.totalSpend ? (value / summary.totalSpend) * 100 : 0;
-      return '<tr><td>' + esc((MARK[name] || '') + ' ' + name) + '</td><td class="num">' + (counts[name] || 0) +
+      return '<tr><td>' + esc((markOf(name) + ' ' + name).trim()) + '</td><td class="num">' + (counts[name] || 0) +
         '</td><td class="num">' + esc(fmt(value)) + '</td><td class="num">' + share.toFixed(1) + '%</td></tr>';
     }).join('');
     return '<div class="table-wrap"><table><thead><tr><th>Category</th><th class="num">Count</th><th class="num">Total</th><th class="num">Share</th></tr></thead><tbody>' +
@@ -563,7 +714,7 @@
   function renderPanel(rows, summary) {
     const panel = $('#panel');
     if (!rows.length) {
-      panel.innerHTML = '<p class="panel-empty">Nothing matches these filters.</p>';
+      panel.innerHTML = '<p class="panel-empty">' + (S.q ? 'Nothing matches this search.' : 'No transactions in this month.') + '</p>';
       return;
     }
     if (S.view === 'mer') panel.innerHTML = merchantTable(rows);
@@ -601,7 +752,7 @@
     }).join('');
     const list = $('#budgetList');
     list.innerHTML = report.statuses.length ? report.statuses.map(item =>
-      '<div class="plan-row"><div class="plan-head"><span>' + esc((MARK[item.name] || '') + ' ' + item.name) + '</span>' +
+      '<div class="plan-row"><div class="plan-head"><span>' + esc((markOf(item.name) + ' ' + item.name).trim()) + '</span>' +
       '<span>' + esc(fmt(item.spent)) + ' of ' + esc(fmt(item.limit)) + '</span></div>' +
       meter(item.ratio, item.level, item.name + ' budget') +
       '<div class="plan-actions"><span class="detail">' + (item.level === 'over' ? 'Over by ' + fmt(Math.abs(item.left)) : fmt(Math.max(item.left, 0)) + ' left') + '</span>' +
@@ -644,84 +795,50 @@
   }
 
   function renderPeriodBar() {
-    const bar = $('#periodBar');
-    const months = periodMonths();
-    if (!months.length) {
-      bar.hidden = false;
-      $('#periodYear').innerHTML = '<option value="">—</option>';
-      $('#periodMonth').innerHTML = '<option value="">—</option>';
-      $('#periodHint').textContent = 'Add a transaction to choose a year and month.';
-      return;
-    }
     ensurePeriod();
+    const bar = $('#periodBar');
     bar.hidden = false;
-    const years = [...new Set(months.map(month => month.slice(0, 4)))].sort((a, b) => b.localeCompare(a));
     const year = S.selectedMonth.slice(0, 4);
-    const yearSel = $('#periodYear');
+    const yearInput = $('#periodYear');
     const monthSel = $('#periodMonth');
-    if (document.activeElement !== yearSel) {
-      yearSel.innerHTML = years.map(item =>
-        '<option value="' + item + '"' + (item === year ? ' selected' : '') + '>' + item + '</option>'
-      ).join('');
-    }
-    const inYear = months.filter(month => month.startsWith(year)).sort((a, b) => b.localeCompare(a));
+    if (document.activeElement !== yearInput) yearInput.value = year;
     if (document.activeElement !== monthSel) {
-      monthSel.innerHTML = inYear.map(month => {
-        const label = L.formatMonth(month, true).replace(/ \d{4}$/, '');
-        return '<option value="' + month + '"' + (month === S.selectedMonth ? ' selected' : '') + '>' + esc(label) + '</option>';
-      }).join('');
+      const options = [];
+      for (let month = 1; month <= 12; month++) {
+        const key = year + '-' + String(month).padStart(2, '0');
+        const label = L.formatMonth(key, true).replace(/ \d{4}$/, '');
+        options.push('<option value="' + key + '"' + (key === S.selectedMonth ? ' selected' : '') + '>' + esc(label) + '</option>');
+      }
+      monthSel.innerHTML = options.join('');
     }
-    $('#periodHint').textContent = 'Totals, categories, transactions, projections, budgets, and savings use ' + L.formatMonth(S.selectedMonth, true) + ' only.';
+    const label = L.formatMonth(S.selectedMonth, true);
+    const hasRows = periodMonths().includes(S.selectedMonth);
+    $('#periodHint').textContent = hasRows
+      ? 'Totals, categories, transactions, projections, budgets, and savings use ' + label + ' only.'
+      : label + ' has no transactions yet. Add one below, or pick another month.';
   }
 
-  function chooseYear(year) {
-    const months = periodMonths().filter(month => month.startsWith(year)).sort();
-    if (!months.length) return;
-    const same = year + S.selectedMonth.slice(4);
-    const now = new Date();
-    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    if (months.includes(same)) S.selectedMonth = same;
-    else if (months.includes(current)) S.selectedMonth = current;
-    else S.selectedMonth = months[months.length - 1];
+  function setYear(raw) {
+    const year = Number(raw);
+    if (!Number.isInteger(year) || year < 1970 || year > 2100) {
+      refresh();
+      return;
+    }
+    const monthNum = /^\d{4}-\d{2}$/.test(S.selectedMonth) ? S.selectedMonth.slice(5, 7) : '01';
+    S.selectedMonth = String(year) + '-' + monthNum;
     planSig = '';
     save();
     refresh();
   }
 
   function refresh() {
-    const empty = $('#empty');
-    const dashboard = $('#dashboard');
-    if (!S.txns.length) {
-      const planned = Object.keys(S.budgets).length || S.goals.length;
-      const settings = S.section === 'settings';
-      empty.hidden = !!planned || settings;
-      dashboard.hidden = !planned && !settings;
-      $('#monthSection').hidden = true;
-      renderPeriodBar();
-      syncTabs();
-      if (planned || settings) {
-        renderPlan([]);
-        $('#stats').innerHTML = '';
-        $('#insights').innerHTML = '';
-        $('#catBars').innerHTML = '';
-        $('#recur').innerHTML = '';
-        $('#panel').innerHTML = '<p class="panel-empty">Add a transaction to compare these plans with real spending.</p>';
-        $('#projections').innerHTML = '';
-        $('#projNote').textContent = '';
-        $('#resultMeta').textContent = '';
-        $('#modeHint').textContent = '';
-      }
-      chartSeq++;
-      if (chart) { chart.destroy(); chart = null; }
-      dropMerchantOptionNodes();
-      return;
-    }
-    empty.hidden = true;
-    dashboard.hidden = false;
-    $('#monthSection').hidden = false;
+    $('#empty').hidden = true;
+    $('#dashboard').hidden = false;
+    const hasMonths = periodMonths().length > 0;
+    $('#monthSection').hidden = !hasMonths;
     renderPeriodBar();
     const view = currentView();
-    renderMonths(view.rows);
+    if (hasMonths) renderMonths(view.rows);
     const monthSummary = L.summarize(view.all);
     const summary = view.summary;
     const periodName = L.formatMonth(S.selectedMonth, true);
@@ -729,15 +846,19 @@
     $('#modeHint').textContent = S.mode === 'auto'
       ? 'Amount style is auto: ' + (view.mode === 'bank' ? 'bank (negative amounts are money out)' : 'card (positive charges are money out)') + '. Change it in Settings if income and spending look swapped.'
       : (view.mode === 'bank' ? 'Bank style: negative amounts are money out.' : 'Card style: positive charges are money out.');
-    $('#addHint').textContent = 'Saved with the current ' + view.mode + ' amount style, so the sign matches the other rows.';
+    $('#addHint').textContent = 'Enter a positive amount. The category decides income or spending, and the sign is saved to match the other rows.';
     renderStats(monthSummary);
     renderInsights(monthSummary);
     renderPlan(view.all);
     renderProjections(view.all);
     renderCategories(monthSummary.categories, monthSummary.totalSpend);
+    renderCustomCategories();
+    fillCategorySelects();
+    syncAddDateToPeriod();
+    if (!S.txns.length) $('#addPanel').open = true;
     $('#recurCard').hidden = true;
     const noun = view.filtered.length === 1 ? 'transaction' : 'transactions';
-    $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + L.formatMonth(S.selectedMonth, true) + '.';
+    $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + periodName + '.';
     syncTabs();
     drawChart(monthSummary.months);
     renderPanel(view.filtered, summary);
@@ -792,25 +913,54 @@
     const txn = S.txns.find(t => t.id === sel.dataset.id);
     const value = L.canonicalCategory(sel.value);
     if (!txn || !value) return;
-    const computed = L.merchant(txn.desc || '');
-    const merchant = txn.m || computed;
-    if (merchant) S.rules[merchant] = value;
-    if (computed && computed !== merchant) S.rules[computed] = value;
-    let count = 0;
-    S.txns.forEach(item => {
-      const itemComputed = L.merchant(item.desc || '');
-      const same = (merchant && (item.m === merchant || itemComputed === merchant)) ||
-        (computed && itemComputed === computed);
-      if (!same) return;
-      item.oc = value;
-      if (!item.m && itemComputed) item.m = itemComputed;
-      count += 1;
-    });
-    setMsg('Set ' + value + ' on ' + count + ' transaction' + (count === 1 ? '' : 's') + ' from ' + (merchant || 'this row') + '.', 'ok');
+    const assigned = assignMerchantCategory(txn, value);
+    setMsg('Set ' + value + ' on ' + assigned.count + ' transaction' + (assigned.count === 1 ? '' : 's') + ' from ' + (assigned.merchant || 'this row') + '.', 'ok');
     planSig = '';
     if (chart) { chart.destroy(); chart = null; }
     save();
     refresh();
+  }
+
+  function deleteCustom(name) {
+    const removed = L.removeCustomCategory(S.custom, name);
+    if (!removed.ok) return;
+    if (!confirm('Delete ' + removed.from + '? Its transactions move to Other. The rows stay.')) return;
+    const rewritten = L.reassignCategory(S.txns, S.rules, S.similar, S.budgets, removed.from, removed.to, true);
+    S.txns = rewritten.txns;
+    S.rules = rewritten.rules;
+    S.similar = rewritten.similar;
+    S.budgets = rewritten.budgets;
+    S.custom = L.setCustomCategories(removed.categories);
+    if (String(S.cat).toLowerCase() === removed.from.toLowerCase()) S.cat = '';
+    planSig = '';
+    save();
+    setMsg('Moved ' + removed.from + ' to Other. The transactions are still saved.', 'ok');
+    refresh();
+  }
+
+  function commitCustomName(input) {
+    const from = input.dataset.customName;
+    const iconSel = input.parentElement.querySelector('[data-custom-icon]');
+    const updated = L.updateCustomCategory(S.custom, from, input.value, iconSel ? iconSel.value : '');
+    if (!updated.ok) {
+      $('#customCatError').textContent = updated.error;
+      input.value = from;
+      return;
+    }
+    if (updated.from === updated.to && updated.icon === (S.custom.find(c => c.name === updated.from) || {}).icon) return;
+    applyCustomUpdate(updated);
+  }
+
+  function commitCustomIcon(sel) {
+    const from = sel.dataset.customIcon;
+    const nameInput = sel.parentElement.querySelector('[data-custom-name]');
+    const updated = L.updateCustomCategory(S.custom, from, nameInput ? nameInput.value : from, sel.value);
+    if (!updated.ok) {
+      $('#customCatError').textContent = updated.error;
+      refresh();
+      return;
+    }
+    applyCustomUpdate(updated);
   }
 
   function bind() {
@@ -819,7 +969,7 @@
     $('#exp').addEventListener('click', () => {
       const view = currentView();
       if (!view.filtered.length) {
-        setMsg('Nothing to export for the current filters.', 'warn');
+        setMsg('Nothing to export for this month.', 'warn');
         return;
       }
       const blob = new Blob([L.exportCsv(view.filtered)], { type: 'text/csv;charset=utf-8' });
@@ -866,17 +1016,18 @@
     });
     $('#clr').addEventListener('click', () => {
       const planned = Object.keys(S.budgets).length || S.goals.length;
-      if (!S.txns.length && !Object.keys(S.rules).length && !S.similar.length && !planned) {
+      if (!S.txns.length && !Object.keys(S.rules).length && !S.similar.length && !planned && !S.custom.length) {
         setMsg('There is nothing saved to clear.', 'warn');
         return;
       }
       const n = S.txns.length;
-      if (!confirm('Remove all ' + n + ' saved transactions, category choices, budgets, and goals from this browser?')) return;
+      if (!confirm('Remove all ' + n + ' saved transactions, category choices, your categories, budgets, and goals from this browser?')) return;
       S.txns = [];
       S.rules = {};
       S.similar = [];
       S.budgets = {};
       S.goals = [];
+      S.custom = L.setCustomCategories([]);
       S.q = '';
       S.cat = '';
       S.selectedMonth = '';
@@ -1011,7 +1162,10 @@
         refresh();
       });
     });
-    $('#periodYear').addEventListener('change', e => chooseYear(e.target.value));
+    $('#periodYear').addEventListener('change', e => setYear(e.target.value));
+    $('#periodYear').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    });
     $('#periodMonth').addEventListener('change', e => {
       S.selectedMonth = e.target.value;
       planSig = '';
@@ -1032,6 +1186,10 @@
     });
 
     $('#dashboard').addEventListener('click', e => {
+      const pick = e.target.closest('[data-pick-icon]');
+      if (pick) { selectIcon(pick.dataset.pickIcon); return; }
+      const delCustom = e.target.closest('[data-delete-custom]');
+      if (delCustom) { deleteCustom(delCustom.dataset.deleteCustom); return; }
       const del = e.target.closest('[data-del]');
       if (del) { removeTxn(del.dataset.del); return; }
       const th = e.target.closest('th[data-sort]');
@@ -1041,9 +1199,57 @@
       S.sk = key;
       refresh();
     });
+    $('#dashboard').addEventListener('focusin', e => {
+      const sel = e.target.closest('select[data-id], #addCategory');
+      if (sel) sel.dataset.prev = sel.value;
+    });
     $('#dashboard').addEventListener('change', e => {
+      const iconSel = e.target.closest('[data-custom-icon]');
+      if (iconSel) { commitCustomIcon(iconSel); return; }
+      const nameInput = e.target.closest('[data-custom-name]');
+      if (nameInput) { commitCustomName(nameInput); return; }
+      if (e.target.id === 'addCategory' && e.target.value === '__new__') {
+        e.target.value = e.target.dataset.prev || '';
+        openCustomForm('add');
+        return;
+      }
       const sel = e.target.closest('select[data-id]');
-      if (sel) applyCategory(sel);
+      if (!sel) return;
+      if (sel.value === '__new__') {
+        const txn = S.txns.find(t => t.id === sel.dataset.id);
+        sel.value = sel.dataset.prev || (txn ? L.categoryOf(txn, S.rules) : '');
+        openCustomForm('txn', sel.dataset.id);
+        return;
+      }
+      applyCategory(sel);
+    });
+    $('#newCategoryFromAdd').addEventListener('click', () => openCustomForm('add'));
+    $('#customCatForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const name = String(new FormData(e.target).get('name') || '');
+      const added = L.addCustomCategory(S.custom, name, pickedIcon);
+      const err = $('#customCatError');
+      if (!added.ok) { err.textContent = added.error; return; }
+      err.textContent = '';
+      e.target.reset();
+      selectIcon(L.customIcons()[0]);
+      S.custom = L.setCustomCategories(added.categories);
+      const pending = pendingCategory;
+      pendingCategory = null;
+      if (pending && pending.kind === 'txn' && pending.id) {
+        const txn = S.txns.find(t => t.id === pending.id);
+        if (txn) assignMerchantCategory(txn, added.name);
+        setMsg('Added ' + added.name + (txn ? ' and set it on ' + (txn.m || 'this row') : '') + '.', 'ok');
+      } else {
+        setMsg('Added category ' + added.name + '.', 'ok');
+      }
+      planSig = '';
+      save();
+      refresh();
+      if (pending && pending.kind === 'add') {
+        const sel = $('#addCategory');
+        if (sel) sel.value = added.name;
+      }
     });
 
     $('#addForm').addEventListener('submit', e => {
@@ -1052,23 +1258,24 @@
       const date = String(data.get('date') || '');
       const desc = String(data.get('desc') || '').trim();
       const amount = Number(data.get('amount'));
-      const kind = data.get('kind') === 'income' ? 'income' : 'spend';
+      const category = L.canonicalCategory(data.get('category'));
       const err = $('#addError');
       if (!L.parseDate(date, 2026)) { err.textContent = 'Choose a real date.'; return; }
       if (desc.length < 2) { err.textContent = 'Add a description of at least 2 characters.'; return; }
       if (!Number.isFinite(amount) || amount <= 0) { err.textContent = 'Enter an amount greater than zero.'; return; }
+      if (!category) { err.textContent = 'Choose a category.'; return; }
       const mode = L.resolveMode(S.txns, S.mode, S.rules);
-      const signed = L.round2(kind === 'spend'
-        ? (mode === 'card' ? amount : -amount)
-        : (mode === 'card' ? -amount : amount));
-      const result = addTransactions([{ date, desc, raw: signed }], 'added by hand');
+      const signed = L.entrySign(amount, category, mode);
+      const result = addTransactions([{ date, desc, raw: signed, category, assign: true }], 'added by hand');
       if (!result.added) { err.textContent = 'That transaction is already saved.'; return; }
+      const month = date.slice(0, 7);
+      if (L.validPeriod(month)) S.selectedMonth = month;
+      S.cat = '';
       save();
       err.textContent = '';
       e.target.reset();
-      const hidden = (S.selectedMonth && !date.startsWith(S.selectedMonth)) ||
-        (S.q && !(desc + ' ' + L.merchant(desc)).toLowerCase().includes(S.q.toLowerCase()));
-      setMsg(hidden ? 'Added “' + desc + '”. It is hidden by the current filters.' : 'Added “' + desc + '”.', 'ok');
+      const hidden = !!(S.q && !(desc + ' ' + L.merchant(desc) + ' ' + category).toLowerCase().includes(S.q.toLowerCase()));
+      setMsg(hidden ? 'Added “' + desc + '”. The search box is hiding it.' : 'Added “' + desc + '”.', 'ok');
       refresh();
     });
 
@@ -1081,14 +1288,7 @@
     load();
     applyTheme(S.theme);
     syncControls();
-    const budgetCat = $('#budgetCategory');
-    budgetCat.innerHTML = L.categoryGroups().map(group => {
-      const cats = group.categories.filter(c => c.role === 'spend');
-      if (!cats.length) return '';
-      return '<optgroup label="' + esc(group.name) + '">' + cats.map(c =>
-        '<option value="' + esc(c.name) + '">' + esc(c.mark + ' ' + c.label) + '</option>'
-      ).join('') + '</optgroup>';
-    }).join('');
+    renderIconPick();
     bind();
     refresh();
   }
