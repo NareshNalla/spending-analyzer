@@ -792,3 +792,112 @@ test('category totals list every non-zero spending category', () => {
   assert.equal(names.includes('Lend'), false);
   assert.equal(names.includes('Fees'), false);
 });
+
+test('custom categories keep their name, icon, and transactions', () => {
+  L.setCustomCategories([]);
+  try {
+    assert.ok(L.customIcons().length >= 12);
+    assert.ok(L.customIcons().includes('🐶'));
+    const added = L.addCustomCategory([], 'Pet care', '🐶');
+    assert.equal(added.ok, true);
+    assert.equal(L.addCustomCategory(added.categories, 'Rent', '🏠').ok, false);
+    assert.equal(L.addCustomCategory(added.categories, 'P', '🐶').ok, false);
+    assert.equal(L.addCustomCategory(added.categories, 'Pet care', '🐶').ok, false);
+    assert.equal(L.addCustomCategory(added.categories, 'Vet', 'nope').ok, false);
+    L.setCustomCategories(added.categories);
+    assert.equal(L.canonicalCategory('pet care'), 'Pet care');
+    assert.equal(L.categoryRole('Pet care'), 'spend');
+    const pet = L.categories().find(c => c.name === 'Pet care');
+    assert.equal(pet.mark, '🐶');
+    assert.equal(pet.group, 'Your categories');
+    assert.equal(pet.role, 'spend');
+    const groups = L.categoryGroups().map(group => group.name);
+    assert.ok(groups.indexOf('Your categories') === groups.indexOf('Other') - 1);
+
+    const txns = [{ id: '1', date: '2018-03-04', desc: 'VET CLINIC', raw: -40, m: 'Vet Clinic', oc: 'Pet care' }];
+    const rules = { 'Vet Clinic': 'Pet care' };
+    const similar = [{ p: 'vet clinic', a: 40, c: 'Pet care' }];
+    const budgets = { 'Pet care': 80, Groceries: 100 };
+    const migrated = L.migrate(txns, rules);
+    assert.equal(migrated.txns[0].oc, 'Pet care');
+    assert.equal(migrated.txns.length, 1);
+    assert.equal(migrated.rules['Vet Clinic'], 'Pet care');
+
+    const renamed = L.updateCustomCategory(added.categories, 'Pet care', 'Pets', '🐾');
+    assert.equal(renamed.ok, true);
+    L.setCustomCategories(renamed.categories);
+    const moved = L.reassignCategory(migrated.txns, migrated.rules, similar, budgets, renamed.from, renamed.to, false);
+    assert.equal(moved.txns[0].oc, 'Pets');
+    assert.equal(moved.txns[0].desc, 'VET CLINIC');
+    assert.equal(moved.rules['Vet Clinic'], 'Pets');
+    assert.equal(moved.similar[0].c, 'Pets');
+    assert.equal(moved.budgets.Pets, 80);
+    assert.equal(moved.budgets.Groceries, 100);
+    const again = L.migrate(moved.txns, moved.rules);
+    assert.equal(again.txns[0].oc, 'Pets');
+    assert.equal(L.categoryOf(again.txns[0], again.rules), 'Pets');
+
+    const removed = L.removeCustomCategory(renamed.categories, 'Pets');
+    assert.equal(removed.to, 'Other');
+    const cleared = L.reassignCategory(again.txns, again.rules, moved.similar, moved.budgets, removed.from, removed.to, true);
+    assert.equal(cleared.txns.length, 1);
+    assert.equal(cleared.txns[0].oc, 'Other');
+    assert.equal(cleared.rules['Vet Clinic'], 'Other');
+    assert.equal(cleared.budgets.Pets, undefined);
+    assert.equal(cleared.budgets.Groceries, 100);
+
+    L.setCustomCategories([]);
+    const stripped = L.migrate(
+      [{ oc: 'Pets', desc: 'VET CLINIC', m: 'Vet Clinic', date: '2018-03-04', raw: -1 }],
+      { 'Vet Clinic': 'Pets' }
+    );
+    assert.equal(stripped.txns[0].oc, undefined);
+    assert.equal(stripped.rules['Vet Clinic'], undefined);
+    assert.equal(stripped.txns[0].desc, 'VET CLINIC');
+
+    const backup = L.buildBackup({
+      t: [{ date: '2018-03-04', desc: 'VET CLINIC', raw: -40, oc: 'Pets' }],
+      cc: renamed.categories,
+      b: { Pets: 25, Groceries: 10 },
+      sr: [{ p: 'vet clinic', a: 40, c: 'Pets' }]
+    });
+    const restored = L.parseBackup(JSON.stringify(backup));
+    assert.deepEqual(restored.cc, [{ name: 'Pets', icon: '🐾' }]);
+    assert.equal(restored.b.Pets, 25);
+    assert.equal(restored.b.Groceries, 10);
+    assert.equal(restored.sr[0].c, 'Pets');
+    assert.equal(L.getCustomCategories().length, 0);
+  } finally {
+    L.setCustomCategories([]);
+  }
+});
+
+test('a typed year and an empty month stay available', () => {
+  assert.equal(L.validPeriod('2018-03'), '2018-03');
+  assert.equal(L.validPeriod('1970-01'), '1970-01');
+  assert.equal(L.validPeriod('2100-12'), '2100-12');
+  assert.equal(L.validPeriod('1969-12'), '');
+  assert.equal(L.validPeriod('2101-01'), '');
+  assert.equal(L.validPeriod('2018-13'), '');
+  assert.equal(L.validPeriod(''), '');
+  L.setCustomCategories([{ name: 'Pet care', icon: '🐶' }]);
+  try {
+    assert.equal(L.entrySign(12.5, 'Pet care', 'bank'), -12.5);
+    assert.equal(L.entrySign(12.5, 'Pet care', 'card'), 12.5);
+    assert.equal(L.entrySign(12.5, 'Income', 'bank'), 12.5);
+    assert.equal(L.entrySign(12.5, 'Income', 'card'), -12.5);
+    assert.equal(L.entrySign(12.5, 'Borrow', 'bank'), 12.5);
+    assert.equal(L.entrySign(12.5, 'Savings', 'bank'), -12.5);
+    const view = L.decorate([
+      { date: '2018-03-04', desc: 'VET CLINIC', raw: -12.5, m: 'Vet Clinic', oc: 'Pet care' }
+    ], 'bank', { 'Vet Clinic': 'Pet care' });
+    assert.equal(view.rows[0].c, 'Pet care');
+    const summary = L.summarize(view.rows);
+    assert.equal(summary.totalSpend, 12.5);
+    assert.equal(summary.totalIncome, 0);
+    assert.equal(summary.categories[0][0], 'Pet care');
+    assert.equal(summary.categories[0][1], 12.5);
+  } finally {
+    L.setCustomCategories([]);
+  }
+});

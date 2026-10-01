@@ -8,7 +8,7 @@
   'use strict';
 
   // localStorage key spend_v3. Existing fields stay: t, r, m, f, to, amn, amx, th, sm.
-  // Optional: v (tab), b (budgets), g (goals), and oc on a transaction (that row's category only).
+  // Optional: v (tab), b (budgets), g (goals), cc (custom categories), and oc on a transaction (that row's category only).
   const STORAGE_KEY = 'spend_v3';
   const BACKUP_VERSION = 1;
 
@@ -92,8 +92,132 @@
   const GROUP_ORDER = [
     'Income', 'Housing', 'Utilities', 'Household help', 'Food', 'Transport',
     'Family & religious', 'Education', 'Health & insurance', 'Loans & tax',
-    'Savings & investments', 'Lifestyle', 'Lend & borrow', 'Transfers', 'Other'
+    'Savings & investments', 'Lifestyle', 'Lend & borrow', 'Transfers', 'Your categories', 'Other'
   ];
+
+  const CUSTOM_GROUP = 'Your categories';
+  const FALLBACK_CATEGORY = 'Other';
+  const CUSTOM_COLORS = ['#7c3aed', '#db2777', '#0891b2', '#ea580c', '#4f46e5', '#0f766e', '#be185d', '#a16207', '#0284c7', '#c026d3'];
+  const CUSTOM_ICONS = ['⭐', '🎯', '🏠', '🚗', '🐶', '🎁', '📚', '💼', '🎮', '☕', '🎵', '🌱', '💊', '✈️', '🛠️', '👶', '🐾', '📷', '🧺', '💡'];
+  let customCategories = [];
+
+  function customIcons() {
+    return CUSTOM_ICONS.slice();
+  }
+
+  function customColor(name) {
+    let hash = 0;
+    const text = String(name || '');
+    for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+    return CUSTOM_COLORS[hash % CUSTOM_COLORS.length];
+  }
+
+  function builtInName(name) {
+    const key = String(name || '').trim().toLowerCase();
+    const hit = CATS.find(c => c[0].toLowerCase() === key);
+    return hit ? hit[0] : null;
+  }
+
+  function normalizeCustom(raw) {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(raw) ? raw : []).forEach(item => {
+      const name = String(item && (item.name || item.n) || '').trim().replace(/\s+/g, ' ');
+      if (name.length < 2 || name.length > 40) return;
+      const key = name.toLowerCase();
+      if (seen.has(key) || builtInName(name)) return;
+      const icon = CUSTOM_ICONS.includes(item && (item.icon || item.i)) ? (item.icon || item.i) : CUSTOM_ICONS[0];
+      seen.add(key);
+      out.push({ name, icon });
+    });
+    return out;
+  }
+
+  function setCustomCategories(list) {
+    customCategories = normalizeCustom(list);
+    return customCategories.map(c => ({ name: c.name, icon: c.icon }));
+  }
+
+  function withCustomCategories(list, fn) {
+    const prev = customCategories.map(c => ({ name: c.name, icon: c.icon }));
+    customCategories = normalizeCustom(list);
+    try {
+      return fn(customCategories.map(c => ({ name: c.name, icon: c.icon })));
+    } finally {
+      customCategories = prev;
+    }
+  }
+
+  function getCustomCategories() {
+    return customCategories.map(c => ({ name: c.name, icon: c.icon }));
+  }
+
+  function findCustom(name) {
+    const key = String(name || '').trim().toLowerCase();
+    return customCategories.find(c => c.name.toLowerCase() === key) || null;
+  }
+
+  function addCustomCategory(list, name, icon) {
+    const current = normalizeCustom(list);
+    const cleaned = String(name || '').trim().replace(/\s+/g, ' ');
+    if (cleaned.length < 2 || cleaned.length > 40) return { ok: false, error: 'Use a name of 2 to 40 characters.' };
+    if (builtInName(cleaned)) return { ok: false, error: 'That name is already a built-in category.' };
+    if (current.some(c => c.name.toLowerCase() === cleaned.toLowerCase())) {
+      return { ok: false, error: 'You already have a category with that name.' };
+    }
+    if (!CUSTOM_ICONS.includes(icon)) return { ok: false, error: 'Pick an icon from the list.' };
+    return { ok: true, categories: current.concat([{ name: cleaned, icon }]), name: cleaned, icon };
+  }
+
+  function updateCustomCategory(list, from, name, icon) {
+    const current = normalizeCustom(list);
+    const source = current.find(c => c.name.toLowerCase() === String(from || '').trim().toLowerCase());
+    if (!source) return { ok: false, error: 'That category is not one you added.' };
+    const nextName = String(name == null ? source.name : name).trim().replace(/\s+/g, ' ');
+    if (nextName.length < 2 || nextName.length > 40) return { ok: false, error: 'Use a name of 2 to 40 characters.' };
+    if (builtInName(nextName)) return { ok: false, error: 'That name is already a built-in category.' };
+    if (current.some(c => c.name.toLowerCase() === nextName.toLowerCase() && c.name.toLowerCase() !== source.name.toLowerCase())) {
+      return { ok: false, error: 'You already have a category with that name.' };
+    }
+    if (!CUSTOM_ICONS.includes(icon)) return { ok: false, error: 'Pick an icon from the list.' };
+    const categories = current.map(c => c.name === source.name ? { name: nextName, icon } : c);
+    return { ok: true, categories, from: source.name, to: nextName, icon };
+  }
+
+  function removeCustomCategory(list, name) {
+    const current = normalizeCustom(list);
+    const source = current.find(c => c.name.toLowerCase() === String(name || '').trim().toLowerCase());
+    if (!source) return { ok: false, error: 'That category is not one you added.' };
+    return {
+      ok: true,
+      categories: current.filter(c => c.name !== source.name),
+      from: source.name,
+      to: FALLBACK_CATEGORY
+    };
+  }
+
+  function reassignCategory(txns, rules, similar, budgets, from, to, dropBudget) {
+    const source = String(from || '').trim();
+    const destName = canonicalCategory(to) || FALLBACK_CATEGORY;
+    const match = value => String(value || '').trim().toLowerCase() === source.toLowerCase();
+    const nextTxns = (txns || []).map(t => match(t.oc) ? { ...t, oc: destName } : t);
+    const nextRules = {};
+    Object.keys(rules || {}).forEach(key => {
+      nextRules[key] = match(rules[key]) ? destName : rules[key];
+    });
+    const nextSimilar = (similar || []).map(rule => (
+      rule && match(rule.c) ? { ...rule, c: destName } : rule
+    ));
+    const nextBudgets = {};
+    Object.keys(budgets || {}).forEach(key => {
+      if (!match(key)) {
+        nextBudgets[key] = budgets[key];
+        return;
+      }
+      if (!dropBudget) nextBudgets[destName] = budgets[key];
+    });
+    return { txns: nextTxns, rules: nextRules, similar: nextSimilar, budgets: nextBudgets, from: source, to: destName };
+  }
 
   const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
   const DATE_RANKS = ['transaction date', 'trans date', 'txn date', 'date', 'posted date', 'posting date', 'post date', 'date posted'];
@@ -214,7 +338,7 @@
   }
 
   function categories() {
-    return CATS.map(c => ({
+    const built = CATS.map(c => ({
       name: c[0],
       color: c[1],
       mark: c[3],
@@ -222,6 +346,15 @@
       role: c[5],
       label: c[6] || c[0]
     }));
+    const custom = customCategories.map(c => ({
+      name: c.name,
+      color: customColor(c.name),
+      mark: c.icon,
+      group: CUSTOM_GROUP,
+      role: 'spend',
+      label: c.name
+    }));
+    return built.concat(custom);
   }
 
   function categoryGroups() {
@@ -237,13 +370,34 @@
   }
 
   function canonicalCategory(name) {
-    const hit = CATS.find(c => c[0].toLowerCase() === String(name || '').trim().toLowerCase());
-    return hit ? hit[0] : null;
+    const built = builtInName(name);
+    if (built) return built;
+    const custom = findCustom(name);
+    return custom ? custom.name : null;
   }
 
   function categoryRole(name) {
     const hit = CATS.find(c => c[0] === name);
-    return hit ? hit[5] : 'spend';
+    if (hit) return hit[5];
+    if (findCustom(name)) return 'spend';
+    return 'spend';
+  }
+
+  function validPeriod(value) {
+    const text = String(value || '');
+    if (!/^\d{4}-\d{2}$/.test(text)) return '';
+    const year = Number(text.slice(0, 4));
+    const month = Number(text.slice(5, 7));
+    if (year < 1970 || year > 2100 || month < 1 || month > 12) return '';
+    return text;
+  }
+
+  function entrySign(amount, category, mode) {
+    const abs = round2(Math.abs(Number(amount)));
+    const name = canonicalCategory(category);
+    if (!name || !Number.isFinite(abs) || abs <= 0) return NaN;
+    const moneyIn = categoryRole(name) === 'income' || name === 'Borrow';
+    return mode === 'card' ? (moneyIn ? -abs : abs) : (moneyIn ? abs : -abs);
   }
 
   function merchant(d) {
@@ -1007,7 +1161,7 @@
   }
 
   function spendCategoryNames() {
-    return CATS.filter(c => c[5] === 'spend').map(c => c[0]);
+    return categories().filter(c => c.role === 'spend').map(c => c.name);
   }
 
   function normalizeBudgets(raw) {
@@ -1111,7 +1265,7 @@
     if (!Array.isArray(txns) && !hasPlans) {
       throw new Error('That file does not look like a Spending Analyzer backup.');
     }
-    return {
+    return withCustomCategories(data.cc || data.customCategories || [], cc => ({
       t: Array.isArray(txns) ? txns : [],
       r: data.r || data.rules || {},
       m: data.m || data.mode || 'auto',
@@ -1122,10 +1276,11 @@
       th: data.th || data.theme || 'auto',
       sm: data.sm || '',
       v: data.v || 'tx',
+      cc,
       b: normalizeBudgets(data.b || data.budgets),
       g: normalizeGoals(data.g || data.goals),
       sr: normalizeSimilar(data.sr || data.similar)
-    };
+    }));
   }
 
   function migrate(txns, rules) {
@@ -1164,6 +1319,17 @@
     categoryGroups,
     canonicalCategory,
     categoryRole,
+    customIcons,
+    normalizeCustom,
+    setCustomCategories,
+    getCustomCategories,
+    addCustomCategory,
+    updateCustomCategory,
+    removeCustomCategory,
+    reassignCategory,
+    validPeriod,
+    entrySign,
+    FALLBACK_CATEGORY,
     merchant,
     payeeKey,
     payeeLabel,

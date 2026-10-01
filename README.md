@@ -6,11 +6,11 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 
 ## Features
 
-- Add and remove transactions, and undo a removal
+- Add a transaction by hand (date, amount, description, and category) and remove one, with undo for a removal. The amount stays positive; the category decides income or spending
 - Import CSV files and text bank-statement PDFs
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
-- The importer is at the top, then the months list, then the year filter, month filter, and Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending is the default tab. Settings holds the title, theme, amount style, export, backup, and the privacy note. The selected menu follows that month. The default month is the current month when the data has it, otherwise the latest month
+- The importer is at the top, then the months list, then the year, month, and Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending is the default tab. Settings holds the title, theme, amount style, export, backup, and the privacy note. The selected menu follows that month. Type any year from 1970 through 2100 and pick any month, including a month with no transactions yet. The default month is the current month when the data has it, otherwise the latest month
 - Search inside the selected month
 - Monthly budgets and savings goals on their own tabs, so the spending view stays uncluttered
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
@@ -18,6 +18,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 - Spending and savings projections on their own tab, labeled as estimates, and scoped to the selected month
 - A Savings category for money moved to savings or investments, kept out of spending
 - Changing a transaction’s category updates every saved row from that same merchant and keeps the choice for later imports. The choice is stored in `spend_v3` on those transactions and as a merchant rule, so a reload keeps it. A different merchant is left alone
+- Add your own categories from the category list or from a transaction’s category menu. Each one has a name and an icon from the built-in set. Rename it, change the icon, or delete it. Deleting moves its transactions to Other and keeps the rows. Custom categories are stored in `spend_v3` and are included in Backup JSON and Restore JSON
 - Categories for housing, utilities, household help, food, transport (including parking, car lease, and electric car charging), family (including separate Pooja, Devotional, and Festival choices), education, health, loans (including Car EMI and a general EMI), savings, subscriptions (Netflix, Spotify, Prime, Hotstar, YouTube, iCloud, Google One, and gym membership), personal care (Haircut for haircut, hair care, salon, and barber; Body care for body care, spa, and grooming), and lend or borrow, including common Indian descriptions. Older names such as Groceries and Housing still work. Lend and Borrow sit together and are left out of spending and income, the same way transfers are. A Zelle or UPI payment stays a transfer unless the description says lend or borrow
 - Export the current view as CSV, or back up and restore everything as JSON
 - Light, dark, or system theme
@@ -37,7 +38,7 @@ Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROA
 
 All of your data stays in the browser.
 
-- Transactions, category choices, theme, filters, budgets, and goals are stored in `localStorage` under the key `spend_v3`.
+- Transactions, category choices, custom categories, theme, budgets, and goals are stored in `localStorage` under the key `spend_v3`.
 - Chart.js and PDF.js are files in [`vendor/`](vendor/README.md). The page does not call a CDN.
 - There is no account, analytics script, or network upload. A JSON backup is a file you download yourself.
 
@@ -51,10 +52,10 @@ python3 -m http.server 8765
 
 Then open `http://127.0.0.1:8765/`.
 
-1. Drop a statement on the importer, press Enter on that box to choose files, or **Load sample data**.
+1. Drop a statement on the importer, press Enter on that box to choose files, or **Add sample data**.
 2. Open **Settings** and check the amount style. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
-4. Below the importer, use the months list, then the year and month filters and the Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending opens first. Totals, categories, transactions, projections, budgets, and savings use the selected month.
+4. Below the importer, use the months list, then the year and month and the Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending opens first, including when nothing is saved yet, so you can type a transaction. Totals, categories, transactions, projections, budgets, and savings use the selected month. Open **Add a transaction** for a date, description, positive amount, and category.
 5. Open **Monthly budgets**, **Savings goals**, **Projections**, or **Settings** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Projections are estimates for that same month. Settings has the theme, amount style, export, backup, and the note that data stays in this browser. Changing a category updates the other rows from that same merchant, and later imports of that merchant keep it.
 6. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
