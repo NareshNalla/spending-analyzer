@@ -4,6 +4,23 @@ A private spending, saving, and expense dashboard that runs entirely in the brow
 
 Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROADMAP.md](ROADMAP.md).
 
+## How this app grew
+
+I wanted a spending, saving, and expense tracker anyone could run, with no account and no server. I used a Grok Bot called Spend Analyzer to decide what the app should do, and Cursor to make each change on this repo. Every change landed as a pull request on main, and GitHub Pages serves that.
+
+The app stayed plain HTML, CSS, and JavaScript on purpose. There is no build step, so the files you see are the app. Numbers stay in the browser under `spend_v3`. A JSON backup is how they move to another browser. Cloud save was considered and set aside for now.
+
+What kept changing, and why:
+
+- Spending is the first screen. Budgets, savings goals, and projections sit in their own menus.
+- A year and a month at the top drive every number. A transaction can be added by hand for any year from 1970 to 2100, including a month that is still empty.
+- Amounts are shown as positive numbers. Only an income category counts as income. Rent and the other everyday categories count as spending. Lend, Borrow, and Savings stay out of both.
+- Changing a category updates the tables, the chart, and the merchant list, and the change is still there after a refresh. The same merchant is categorized again in the background, with no checkbox.
+- Categories grew from real life, including Indian household costs, then parking, subscriptions, car lease, car EMI, a general EMI, car charging, haircut, and body care. A custom category can be added with a name and an icon from a built-in set.
+- Date, amount, and category filter boxes were removed. They got in the way more than they helped.
+
+A React rewrite and TanStack were looked at and not taken. A cleaner layout was sketched and left as a sketch. The page in use is still this one.
+
 ## Features
 
 - Add a transaction by hand (date, amount, description, and category) and remove one, with undo for a removal. The amount stays positive; the category decides income or spending
