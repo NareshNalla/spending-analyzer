@@ -38,6 +38,14 @@ What kept changing, and why:
 
 A React rewrite and TanStack were looked at and not taken. A cleaner layout was sketched and left as a sketch. The page in use is still this one.
 
+## For someone using it
+
+Drop or attach a bank statement (CSV or PDF). Categories are filled in for you. If a few are wrong, change them. That change shows across the app (tables, chart, category totals, merchants) and the same merchant is categorized the same way next time. Everything is saved only in this browser. There is no account and no server. Use Backup JSON if you want a copy.
+
+## For someone building on it
+
+Clone or fork the repo and use it. There is no build step. Open index.html, or serve the folder. See [CONTRIBUTING.md](CONTRIBUTING.md). The live site is <https://nareshnalla.github.io/spending-analyzer/>.
+
 ## Features
 
 - Add a transaction by hand (date, amount, description, and category) and remove one, with undo for a removal. The amount stays positive; the category decides income or spending
