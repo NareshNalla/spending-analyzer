@@ -43,11 +43,21 @@ A React rewrite and TanStack were looked at and not taken. A cleaner layout was 
 
 ## Screenshots
 
-![Year, month, and section tabs in one bar at the top](docs/screenshots/top-bar.png)
+![Year, month, and section tabs on Spending](docs/screenshots/top-bar.png)
 
-![Months list first under the Spending tab](docs/screenshots/months-first.png)
+![Months list for the selected year](docs/screenshots/months-first.png)
 
-![Savings goals on their own tab](docs/screenshots/goals-tab.png)
+![Add a transaction by hand](docs/screenshots/add-transaction.png)
+
+![A custom category with a built-in icon](docs/screenshots/custom-category.png)
+
+![Monthly budgets](docs/screenshots/budgets-tab.png)
+
+![Savings goals](docs/screenshots/goals-tab.png)
+
+![Projections for the selected month](docs/screenshots/projections.png)
+
+![Settings](docs/screenshots/settings.png)
 
 ![Dark theme](docs/screenshots/dark.png)
 
