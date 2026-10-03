@@ -2,7 +2,24 @@
 
 A private spending, saving, and expense dashboard that runs entirely in the browser. Drop in a bank CSV or a text-based statement PDF, set category budgets and savings goals, and keep a JSON backup. Nothing is uploaded.
 
-Licensed under the [MIT License](LICENSE). Ideas for what comes next are in [ROADMAP.md](ROADMAP.md).
+The live site is <https://nareshnalla.github.io/spending-analyzer/> (GitHub Pages).
+
+This project is free under the [MIT License](LICENSE). Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+These problems are ready to implement. They are not reserved. [ROADMAP.md](ROADMAP.md) has the same list with a bit more detail.
+
+- Year-over-year comparison: the same calendar month across years.
+- Smarter subscription detection: how often a charge repeats, when the price changes, and a flag that it looks like a subscription. A calendar of the next expected rent, bill, or subscription is still open too.
+- Multi-currency. Amounts are US dollars only, and mixed currencies are not converted.
+- A PWA, so the site can be installed and used offline. There is no manifest or service worker yet.
+- Better handling of scanned PDFs. Text PDFs already import. Pages that are only images do not.
+- OFX and QFX import.
+- Day/month/year dates on statements that are not written month first.
+- A refund should be able to lower what a category budget has spent.
+- Edit or delete a merchant rule without opening one of that merchant’s transactions.
+- The rest of the accessibility pass: a screen reader check, contrast on every state, and a skip link.
+
+Custom categories, with a name and an icon from the built-in set, are already in the app. That is not an open problem.
 
 ## How this app grew
 
@@ -123,7 +140,24 @@ node --test test/logic.test.js
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+The live site is <https://nareshnalla.github.io/spending-analyzer/> (GitHub Pages).
+
+This project is free under the [MIT License](LICENSE). Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+These problems are ready to implement. They are not reserved. [ROADMAP.md](ROADMAP.md) has the same list with a bit more detail.
+
+- Year-over-year comparison: the same calendar month across years.
+- Smarter subscription detection: how often a charge repeats, when the price changes, and a flag that it looks like a subscription. A calendar of the next expected rent, bill, or subscription is still open too.
+- Multi-currency. Amounts are US dollars only, and mixed currencies are not converted.
+- A PWA, so the site can be installed and used offline. There is no manifest or service worker yet.
+- Better handling of scanned PDFs. Text PDFs already import. Pages that are only images do not.
+- OFX and QFX import.
+- Day/month/year dates on statements that are not written month first.
+- A refund should be able to lower what a category budget has spent.
+- Edit or delete a merchant rule without opening one of that merchant’s transactions.
+- The rest of the accessibility pass: a screen reader check, contrast on every state, and a skip link.
+
+Custom categories, with a name and an icon from the built-in set, are already in the app. That is not an open problem.
 
 ## Limits
 
