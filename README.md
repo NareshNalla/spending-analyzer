@@ -40,11 +40,11 @@ A React rewrite and TanStack were looked at and not taken. A cleaner layout was 
 
 ## For someone using it
 
-Drop or attach a bank statement (CSV or PDF). Categories are filled in for you. If a few are wrong, change them. That change shows across the app (tables, chart, category totals, merchants) and the same merchant is categorized the same way next time. Everything is saved only in this browser. There is no account and no server. Use Backup JSON if you want a copy.
+Drop in a bank statement, CSV or PDF. Categories are filled in for you. If a few are wrong, change them. That change shows across the app (tables, chart, category totals, and merchants), and the same merchant is categorized the same way next time. It is saved only in this browser. There is no account and no server. Use Backup JSON if you want a copy to move to another browser.
 
 ## For someone building on it
 
-Clone or fork the repo and use it. There is no build step. Open index.html, or serve the folder. See [CONTRIBUTING.md](CONTRIBUTING.md). The live site is <https://nareshnalla.github.io/spending-analyzer/>.
+Clone or fork the repo and use it. There is no build step. Open index.html, or serve the folder. See [CONTRIBUTING.md](CONTRIBUTING.md). The live site is https://nareshnalla.github.io/spending-analyzer/
 
 ## Features
 
