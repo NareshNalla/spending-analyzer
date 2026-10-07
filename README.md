@@ -10,11 +10,10 @@ These problems are ready to implement. They are not reserved. [ROADMAP.md](ROADM
 
 - Year-over-year comparison: the same calendar month across years.
 - Smarter subscription detection: how often a charge repeats, when the price changes, and a flag that it looks like a subscription. A calendar of the next expected rent, bill, or subscription is still open too.
-- Multi-currency. Amounts are US dollars only, and mixed currencies are not converted.
+- Multi-currency conversion. Settings can label amounts as US dollars or Indian rupees, including Indian digit grouping. A file that mixes currencies is still not converted.
 - A PWA, so the site can be installed and used offline. There is no manifest or service worker yet.
 - Better handling of scanned PDFs. Text PDFs already import. Pages that are only images do not.
 - OFX and QFX import.
-- Day/month/year dates on statements that are not written month first.
 - A refund should be able to lower what a category budget has spent.
 - Edit or delete a merchant rule without opening one of that merchant’s transactions.
 - The rest of the accessibility pass: a screen reader check, contrast on every state, and a skip link.
@@ -52,7 +51,8 @@ Clone or fork the repo and use it. There is no build step. Open index.html, or s
 - Import CSV files and text bank-statement PDFs
 - Guess categories, then remember the category you pick for a merchant
 - Track income, spending, net, and savings rate, with transfers left out of those totals
-- The importer is at the top, then the months list, then the year, month, and Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending is the default tab. Settings holds the title, theme, amount style, export, backup, and the privacy note. The selected menu follows that month. Type any year from 1970 through 2100 and pick any month, including a month with no transactions yet. The default month is the current month when the data has it, otherwise the latest month
+- The importer is at the top, then the months list, then the year, month, and Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending is the default tab unless Settings says to open somewhere else. Settings groups appearance, money and dates, where the app opens, and export, backup, restore, and clear data. The selected menu follows that month. Type any year from 1970 through 2100 and pick any month, including a month with no transactions yet. The default month is the current month when the data has it, otherwise the latest month. A salary-cycle start day other than 1 groups each month from that day through the day before it next month
+- Display amounts as US dollars or Indian rupees. Indian rupees use Indian digit grouping, such as ₹1,23,456.00. This is a label. Amounts are not converted. CSV and PDF amounts written with ₹, Rs, or INR still import
 - Search inside the selected month
 - Monthly budgets and savings goals on their own tabs, so the spending view stays uncluttered
 - Monthly budget per spending category, with an alert at 80% and when the limit is passed
@@ -63,7 +63,8 @@ Clone or fork the repo and use it. There is no build step. Open index.html, or s
 - Add your own categories from the category list or from a transaction’s category menu. Each one has a name and an icon from the built-in set. Rename it, change the icon, or delete it. Deleting moves its transactions to Other and keeps the rows. Custom categories are stored in `spend_v3` and are included in Backup JSON and Restore JSON
 - Categories for housing, utilities, household help, food, transport (including parking, car lease, and electric car charging), family (including separate Pooja, Devotional, and Festival choices), education, health, loans (including Car EMI and a general EMI), savings, subscriptions (Netflix, Spotify, Prime, Hotstar, YouTube, iCloud, Google One, and gym membership), personal care (Haircut for haircut, hair care, salon, and barber; Body care for body care, spa, and grooming), and lend or borrow, including common Indian descriptions. Older names such as Groceries and Housing still work. Lend and Borrow sit together and are left out of spending and income, the same way transfers are. A Zelle or UPI payment stays a transfer unless the description says lend or borrow
 - Export the current view as CSV, or back up and restore everything as JSON
-- Light, dark, or system theme
+- Light, dark, or system theme, and a comfortable or compact density
+- Preferences for currency, date order (month/day/year or day/month/year), salary-cycle start day, the tab that opens, and density. They are stored in `spend_v3` and included in Backup JSON and Restore JSON. If nothing is set, the app stays on US dollars, month/day/year dates, calendar months, the last tab you used, and comfortable density
 - Built-in sample data so you can try it with no statement
 
 ## Screenshots
@@ -90,7 +91,7 @@ Clone or fork the repo and use it. There is no build step. Open index.html, or s
 
 All of your data stays in the browser.
 
-- Transactions, category choices, custom categories, theme, budgets, and goals are stored in `localStorage` under the key `spend_v3`.
+- Transactions, category choices, custom categories, theme, display preferences, budgets, and goals are stored in `localStorage` under the key `spend_v3`.
 - Chart.js and PDF.js are files in [`vendor/`](vendor/README.md). The page does not call a CDN.
 - There is no account, analytics script, or network upload. A JSON backup is a file you download yourself.
 
@@ -105,10 +106,10 @@ python3 -m http.server 8765
 Then open `http://127.0.0.1:8765/`.
 
 1. Drop a statement on the importer, press Enter on that box to choose files, or **Add sample data**.
-2. Open **Settings** and check the amount style. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped.
+2. Open **Settings** and check the amount style. **Bank** means negative amounts are money out. **Card** means positive charges are money out. **Auto** looks at purchases it recognizes. Switch the style if income and spending look swapped. The same screen chooses US dollars or Indian rupees (a label only; amounts are not converted), month/day/year or day/month/year, and whether a month starts on the 1st or on a payday.
 3. Set a merchant’s category in the table. Later rows for that merchant keep it.
 4. Below the importer, use the months list, then the year and month and the Spending, Monthly budgets, Savings goals, Projections, and Settings menu. Spending opens first, including when nothing is saved yet, so you can type a transaction. Totals, categories, transactions, projections, budgets, and savings use the selected month. Open **Add a transaction** for a date, description, positive amount, and category.
-5. Open **Monthly budgets**, **Savings goals**, **Projections**, or **Settings** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Projections are estimates for that same month. Settings has the theme, amount style, export, backup, and the note that data stays in this browser. Changing a category updates the other rows from that same merchant, and later imports of that merchant keep it.
+5. Open **Monthly budgets**, **Savings goals**, **Projections**, or **Settings** from that menu. A budget compares with spending in the selected month. A savings goal is a tally you enter yourself. Projections are estimates for that same month. Settings has appearance, money and dates, the opening tab, export, backup, and the note that data stays in this browser. Changing a category updates the other rows from that same merchant, and later imports of that merchant keep it.
 6. **Export CSV** downloads the rows you are looking at. **Backup JSON** downloads the full saved state, and **Restore JSON** replaces what is in this browser.
 
 ### CSV files
@@ -121,7 +122,7 @@ Then open `http://127.0.0.1:8765/`.
 | Balance | Balance, Running Balance (not treated as the amount) |
 | Category | Category, when the value is one of this app’s categories |
 
-A file with no header should be `date, description, amount`. A trailing running-balance column is detected when the balances line up. Quoted commas, a UTF-8 BOM, `;` or tab separators, ISO dates (`2026-01-05`), US dates (`01/05/2026`), `($12.50)`, `12.50 CR`, and a trailing minus (`40.00-`) are supported. Dates are read as month/day/year.
+A file with no header should be `date, description, amount`. A trailing running-balance column is detected when the balances line up. Quoted commas, a UTF-8 BOM, `;` or tab separators, ISO dates (`2026-01-05`), numeric dates (`01/05/2026`), `($12.50)`, `₹1,23,456.00`, `Rs. 1,500.00`, `INR 1500`, `12.50 CR`, and a trailing minus (`40.00-`) are supported. Numeric dates are read as month/day/year unless Settings is set to day/month/year. A year-month-day date is always read that way. If the chosen order cannot be a real date, the other order is used.
 
 Examples live in [`examples/`](examples/). Re-importing an export from this app works: the file is `Date,Description,Merchant,Category,Amount`, and Amount stays signed (negative means money out). On screen every amount is positive. Green is an income category and red is spending. Lend, Borrow, and Savings stay out of both.
 
@@ -156,11 +157,10 @@ These problems are ready to implement. They are not reserved. [ROADMAP.md](ROADM
 
 - Year-over-year comparison: the same calendar month across years.
 - Smarter subscription detection: how often a charge repeats, when the price changes, and a flag that it looks like a subscription. A calendar of the next expected rent, bill, or subscription is still open too.
-- Multi-currency. Amounts are US dollars only, and mixed currencies are not converted.
+- Multi-currency conversion. Settings can label amounts as US dollars or Indian rupees, including Indian digit grouping. A file that mixes currencies is still not converted.
 - A PWA, so the site can be installed and used offline. There is no manifest or service worker yet.
 - Better handling of scanned PDFs. Text PDFs already import. Pages that are only images do not.
 - OFX and QFX import.
-- Day/month/year dates on statements that are not written month first.
 - A refund should be able to lower what a category budget has spent.
 - Edit or delete a merchant rule without opening one of that merchant’s transactions.
 - The rest of the accessibility pass: a screen reader check, contrast on every state, and a skip link.
@@ -169,7 +169,7 @@ Custom categories, with a name and an icon from the built-in set, are already in
 
 ## Limits
 
-- Amounts are shown in US dollars. Mixed currencies are not converted.
+- Amounts are labeled in the currency chosen in Settings (US dollars or Indian rupees). The symbol and digit grouping change. Amounts are not converted between currencies.
 - Category guesses are keyword rules. A wrong guess is fixed by setting the merchant’s category.
 - A category budget counts money out. A refund does not lower that category’s spent amount.
 - PDF layout varies by bank. If a PDF imports nothing useful, export a CSV instead.

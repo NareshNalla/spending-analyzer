@@ -3,7 +3,6 @@
 
   const L = window.SpendLogic;
   const $ = s => document.querySelector(s);
-  const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
   const S = {
     txns: [],
@@ -20,7 +19,8 @@
     budgets: {},
     goals: [],
     similar: [],
-    custom: []
+    custom: [],
+    pref: L.normalizePrefs(null)
   };
 
   let chart = null;
@@ -40,7 +40,11 @@
   }
 
   function fmt(n) {
-    return money.format(Number.isFinite(n) ? n : 0);
+    return L.formatMoney(n, S.pref.cur);
+  }
+
+  function periodName(long) {
+    return L.periodLabel(S.selectedMonth, S.pref.cycle, !!long);
   }
 
   function colorOf(name) {
@@ -82,7 +86,8 @@
       b: S.budgets,
       g: S.goals,
       sr: S.similar,
-      cc: S.custom
+      cc: S.custom,
+      pref: S.pref
     };
   }
 
@@ -110,6 +115,8 @@
     S.budgets = L.normalizeBudgets(d.b);
     S.goals = L.normalizeGoals(d.g);
     S.similar = L.normalizeSimilar(d.sr);
+    S.pref = L.normalizePrefs(d.pref);
+    if (S.pref.land) S.section = S.pref.land;
     planSig = '';
     return migrated;
   }
@@ -117,6 +124,16 @@
   function syncControls() {
     $('#mode').value = S.mode;
     $('#theme').value = S.theme;
+    const currency = $('#currency');
+    const dateOrder = $('#dateOrder');
+    const cycleDay = $('#cycleDay');
+    const landing = $('#landing');
+    const density = $('#density');
+    if (currency) currency.value = S.pref.cur;
+    if (dateOrder) dateOrder.value = S.pref.df;
+    if (cycleDay) cycleDay.value = String(S.pref.cycle);
+    if (landing) landing.value = S.pref.land;
+    if (density) density.value = S.pref.den;
   }
 
   function load() {
@@ -129,7 +146,8 @@
     const storedMax = d.amx == null || d.amx === '' ? null : Number(d.amx);
     const filtersSet = !!(d.f || d.to || Number(d.amn) || (storedMax != null && storedMax !== 999999));
     const customChanged = JSON.stringify(d.cc || []) !== JSON.stringify(S.custom);
-    if (merchantsChanged || rulesChanged || filtersSet || customChanged) save();
+    const prefsChanged = JSON.stringify(d.pref || null) !== JSON.stringify(S.pref);
+    if (merchantsChanged || rulesChanged || filtersSet || customChanged || prefsChanged) save();
   }
 
   function applyTheme(pref) {
@@ -137,6 +155,15 @@
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     S.theme = pref || 'auto';
     $('#theme').value = S.theme;
+  }
+
+  function applyDensity(pref) {
+    const den = pref === 'compact' ? 'compact' : 'comfortable';
+    if (den === 'compact') document.documentElement.dataset.density = 'compact';
+    else delete document.documentElement.dataset.density;
+    S.pref.den = den;
+    const el = $('#density');
+    if (el) el.value = den;
   }
 
   function themeColors() {
@@ -148,7 +175,7 @@
   function periodMonths() {
     const seen = new Set();
     S.txns.forEach(t => {
-      const month = String(t.date || '').slice(0, 7);
+      const month = L.cycleOf(t.date, S.pref.cycle);
       if (/^\d{4}-\d{2}$/.test(month)) seen.add(month);
     });
     return [...seen].sort();
@@ -162,7 +189,7 @@
     }
     const months = periodMonths();
     if (months.length) {
-      S.selectedMonth = L.defaultPeriod(months, new Date());
+      S.selectedMonth = L.defaultPeriod(months, new Date(), S.pref.cycle);
       return;
     }
     const now = new Date();
@@ -170,8 +197,7 @@
   }
 
   function periodBounds() {
-    if (!/^\d{4}-\d{2}$/.test(S.selectedMonth)) return { from: '', to: '' };
-    return { from: S.selectedMonth + '-01', to: S.selectedMonth + '-31' };
+    return L.cycleBounds(S.selectedMonth, S.pref.cycle);
   }
 
   function currentView() {
@@ -280,7 +306,7 @@
     }
     const years = [...lines.join(' ').matchAll(/\b(20\d{2})\b/g)].map(m => +m[1]);
     const year = years.length ? Math.max(...years) : new Date().getFullYear();
-    return L.parseStatementLines(lines, year);
+    return L.parseStatementLines(lines, year, { dateOrder: S.pref.df });
   }
 
   async function ingest(files) {
@@ -298,7 +324,7 @@
           continue;
         }
         let parsed;
-        if (isCsv) parsed = L.parseCsv(await file.text());
+        if (isCsv) parsed = L.parseCsv(await file.text(), { dateOrder: S.pref.df });
         else parsed = { txns: await readPdf(file), skipped: 0, hint: 'This PDF may be a scan, or its layout was not recognized. A CSV export from the bank is more reliable.' };
         if (!parsed.txns.length) {
           failed = true;
@@ -418,7 +444,9 @@
       if (seq !== chartSeq || !S.txns.length) return;
       const withYear = new Set(months.map(m => m.month.slice(0, 4))).size > 1;
       const colors = themeColors();
-      const labels = months.map(m => L.monthTick(m.month, withYear));
+      const labels = months.map(m => S.pref.cycle === 1
+        ? L.monthTick(m.month, withYear)
+        : L.periodLabel(m.month, S.pref.cycle, withYear));
       const income = months.map(m => m.income);
       const spend = months.map(m => m.spend);
       const savings = months.map(m => m.savings || 0);
@@ -443,7 +471,7 @@
             x: { ticks: { color: colors.text }, grid: { display: false } },
             y: {
               beginAtZero: true,
-              ticks: { color: colors.text, callback: value => '$' + Number(value).toLocaleString('en-US') },
+              ticks: { color: colors.text, callback: value => fmt(Number(value)) },
               grid: { color: colors.grid }
             }
           }
@@ -532,10 +560,9 @@
     if (!input || input.value || document.activeElement === input) return;
     if (!L.validPeriod(S.selectedMonth)) return;
     const now = new Date();
-    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    input.value = S.selectedMonth === current
-      ? current + '-' + String(now.getDate()).padStart(2, '0')
-      : S.selectedMonth + '-01';
+    const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const bounds = L.cycleBounds(S.selectedMonth, S.pref.cycle);
+    input.value = L.cycleOf(today, S.pref.cycle) === S.selectedMonth ? today : bounds.from;
   }
 
   function syncAddDateToPeriod() {
@@ -544,8 +571,9 @@
     const now = new Date();
     const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
     const value = input.value;
-    if (value && value.slice(0, 7) === S.selectedMonth) return;
-    if (value && !value.endsWith('-01') && value !== today) return;
+    if (value && L.cycleOf(value, S.pref.cycle) === S.selectedMonth) return;
+    const day = +(String(value).slice(8, 10));
+    if (value && day !== 1 && day !== S.pref.cycle && value !== today) return;
     input.value = '';
     prefillAddDate();
   }
@@ -612,7 +640,7 @@
     }).join('') + '<th aria-label="Remove"></th>';
     const body = sorted.map(t =>
       '<tr>' +
-      '<td>' + esc(t.date) + '</td>' +
+      '<td>' + esc(L.formatDisplayDate(t.date, S.pref.df)) + '</td>' +
       '<td class="desc" title="' + esc(t.file || '') + '">' + esc(t.desc) + '</td>' +
       '<td class="merchant">' + esc(t.m) + '</td>' +
       '<td><div class="cat-cell"><span class="swatch" style="background:' + colorOf(t.c) + '"></span>' +
@@ -679,7 +707,7 @@
         const summary = '<tr class="year-head">' + cells(year.year, year.spend, year.income, year.savings, year.net) + '</tr>';
         const list = year.months.map(item => {
           const active = item.month === S.selectedMonth;
-          const label = L.formatMonth(item.month, true).replace(/ \d{4}$/, '');
+          const label = L.periodLabel(item.month, S.pref.cycle, false);
           return '<tr class="month-row' + (active ? ' active' : '') + '" data-month="' + item.month + '" tabindex="0" role="button" aria-pressed="' + (active ? 'true' : 'false') + '">' +
             cells(label, item.spend, item.income, item.savings, item.net) + '</tr>';
         }).join('');
@@ -698,7 +726,7 @@
   }
 
   function renderProjections(rows) {
-    const report = L.projections(rows, new Date(), S.selectedMonth);
+    const report = L.projections(rows, new Date(), S.selectedMonth, S.pref.cycle);
     $('#projNote').textContent = projectionNote(report);
     const shown = value => value == null ? '—' : fmt(value);
     $('#projections').innerHTML = [
@@ -735,7 +763,7 @@
     const report = L.planReport(rows, S.budgets, S.goals, {
       dateFrom: bounds.from,
       dateTo: bounds.to
-    });
+    }, S.pref.cycle);
     const sig = JSON.stringify(report);
     if (sig === planSig) return;
     planSig = sig;
@@ -761,7 +789,7 @@
     const goals = $('#goalList');
     goals.innerHTML = report.goals.length ? report.goals.map(goal =>
       '<div class="plan-row"><div class="plan-head"><span>' + esc(goal.name) +
-      (goal.deadline ? ' · due ' + esc(goal.deadline) : '') + (goal.done ? ' · reached' : '') + '</span>' +
+      (goal.deadline ? ' · due ' + esc(L.formatDisplayDate(goal.deadline, S.pref.df)) : '') + (goal.done ? ' · reached' : '') + '</span>' +
       '<span>' + esc(fmt(goal.saved)) + ' of ' + esc(fmt(goal.target)) + '</span></div>' +
       meter(goal.ratio, goal.done ? 'ok' : 'near', goal.name + ' goal') +
       '<form class="contrib" data-goal="' + esc(goal.id) + '">' +
@@ -806,12 +834,12 @@
       const options = [];
       for (let month = 1; month <= 12; month++) {
         const key = year + '-' + String(month).padStart(2, '0');
-        const label = L.formatMonth(key, true).replace(/ \d{4}$/, '');
+        const label = L.periodLabel(key, S.pref.cycle, false);
         options.push('<option value="' + key + '"' + (key === S.selectedMonth ? ' selected' : '') + '>' + esc(label) + '</option>');
       }
       monthSel.innerHTML = options.join('');
     }
-    const label = L.formatMonth(S.selectedMonth, true);
+    const label = periodName(true);
     const hasRows = periodMonths().includes(S.selectedMonth);
     $('#periodHint').textContent = hasRows
       ? 'Totals, categories, transactions, projections, budgets, and savings use ' + label + ' only.'
@@ -839,10 +867,10 @@
     renderPeriodBar();
     const view = currentView();
     if (hasMonths) renderMonths(view.rows);
-    const monthSummary = L.summarize(view.all);
+    const monthSummary = L.summarize(view.all, S.pref.cycle);
     const summary = view.summary;
-    const periodName = L.formatMonth(S.selectedMonth, true);
-    $('#chartTitle').textContent = 'Income and spending in ' + periodName;
+    const periodTitle = periodName(true);
+    $('#chartTitle').textContent = 'Income and spending in ' + periodTitle;
     $('#modeHint').textContent = S.mode === 'auto'
       ? 'Amount style is auto: ' + (view.mode === 'bank' ? 'bank (negative amounts are money out)' : 'card (positive charges are money out)') + '. Change it in Settings if income and spending look swapped.'
       : (view.mode === 'bank' ? 'Bank style: negative amounts are money out.' : 'Card style: positive charges are money out.');
@@ -858,7 +886,7 @@
     if (!S.txns.length) $('#addPanel').open = true;
     $('#recurCard').hidden = true;
     const noun = view.filtered.length === 1 ? 'transaction' : 'transactions';
-    $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + periodName + '.';
+    $('#resultMeta').textContent = view.filtered.length + ' ' + noun + ' in ' + periodTitle + '.';
     syncTabs();
     drawChart(monthSummary.months);
     renderPanel(view.filtered, summary);
@@ -966,6 +994,20 @@
   function bind() {
     $('#theme').addEventListener('change', e => { applyTheme(e.target.value); save(); refresh(); });
     $('#mode').addEventListener('change', e => { S.mode = e.target.value; save(); refresh(); });
+    const setPref = (patch, applyLanding) => {
+      S.pref = L.normalizePrefs({ ...S.pref, ...patch });
+      applyDensity(S.pref.den);
+      if (applyLanding && S.pref.land) S.section = S.pref.land;
+      planSig = '';
+      syncControls();
+      save();
+      refresh();
+    };
+    $('#currency').addEventListener('change', e => setPref({ cur: e.target.value }));
+    $('#dateOrder').addEventListener('change', e => setPref({ df: e.target.value }));
+    $('#cycleDay').addEventListener('change', e => setPref({ cycle: Number(e.target.value) }));
+    $('#landing').addEventListener('change', e => setPref({ land: e.target.value }, true));
+    $('#density').addEventListener('change', e => setPref({ den: e.target.value }));
     $('#exp').addEventListener('click', () => {
       const view = currentView();
       if (!view.filtered.length) {
@@ -1003,6 +1045,7 @@
           S.cat = '';
           $('#q').value = '';
           applyTheme(S.theme);
+          applyDensity(S.pref.den);
           syncControls();
           save();
           setMsg('Restored ' + count + ' transactions from ' + file.name + '.', 'ok');
@@ -1268,7 +1311,7 @@
       const signed = L.entrySign(amount, category, mode);
       const result = addTransactions([{ date, desc, raw: signed, category, assign: true }], 'added by hand');
       if (!result.added) { err.textContent = 'That transaction is already saved.'; return; }
-      const month = date.slice(0, 7);
+      const month = L.cycleOf(date, S.pref.cycle);
       if (L.validPeriod(month)) S.selectedMonth = month;
       S.cat = '';
       save();
@@ -1284,9 +1327,22 @@
     });
   }
 
+  function fillCycleDays() {
+    const sel = $('#cycleDay');
+    if (!sel || sel.options.length) return;
+    for (let day = 1; day <= 28; day++) {
+      const opt = document.createElement('option');
+      opt.value = String(day);
+      opt.textContent = day === 1 ? '1 (calendar month)' : String(day);
+      sel.appendChild(opt);
+    }
+  }
+
   function init() {
     load();
     applyTheme(S.theme);
+    applyDensity(S.pref.den);
+    fillCycleDays();
     syncControls();
     renderIconPick();
     bind();

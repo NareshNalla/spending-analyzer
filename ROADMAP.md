@@ -40,7 +40,7 @@ Status values:
 | Budget alerts | Shipped | Amber at 80% of the limit, red when spending goes past it. Landing exactly on the limit stays on budget |
 | Savings goals with progress | Shipped | Name, target, amount saved, optional deadline, and an add-to-goal control. This is a tally you enter, not a bank balance |
 | Savings category | Shipped | Money moved to savings, deposits, SIPs, PPF, and similar is not counted as spending |
-| JSON backup and restore | Shipped | Full `spend_v3` snapshot, including budgets and goals. A raw older snapshot restores too |
+| JSON backup and restore | Shipped | Full `spend_v3` snapshot, including budgets, goals, and display preferences. A raw older snapshot restores too |
 | CSV export | Shipped | The rows in the current view, same columns as before |
 
 ## Phase 4 — Recurring money and longer trends
@@ -56,10 +56,12 @@ Status values:
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Multi-currency | Later | Display is US dollars. Mixed-currency files are not converted |
+| Display currency | Shipped | Settings can label amounts as US dollars or Indian rupees. Indian rupees use grouping such as ₹1,23,456.00. Amounts are not converted |
+| Multi-currency conversion | Later | A file that mixes currencies is not converted. The symbol is a label |
 | Offline / PWA install | Later | CSV works from a saved copy of the site. There is no manifest, service worker, or install prompt yet |
 | Accessibility pass | Partial | Labels, keyboard drop zone, visible focus, progress bars, and reduced motion are in. A fuller audit (screen reader pass, contrast on every state, skip link) is still open |
-| More statement layouts | Later | Day/month/year dates, image-only PDFs, and OFX/QFX |
+| Date order | Shipped | Settings chooses month/day/year (the default) or day/month/year for on-screen dates and for numeric dates on a statement. Year-month-day dates stay unambiguous |
+| More statement layouts | Later | Image-only PDFs and OFX/QFX |
 | Rules editor | Later | Edit or delete a merchant rule without finding one of its rows |
 
 ## Out of scope for this app

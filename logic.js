@@ -8,7 +8,9 @@
   'use strict';
 
   // localStorage key spend_v3. Existing fields stay: t, r, m, f, to, amn, amx, th, sm.
-  // Optional: v (tab), b (budgets), g (goals), cc (custom categories), and oc on a transaction (that row's category only).
+  // Optional: v (tab), b (budgets), g (goals), cc (custom categories), pref (display preferences),
+  // and oc on a transaction (that row's category only).
+  // pref is { cur, df, cycle, land, den }. Missing pref means USD, month/day/year, calendar months.
   const STORAGE_KEY = 'spend_v3';
   const BACKUP_VERSION = 1;
 
@@ -229,9 +231,11 @@
   const DATE_TOKEN = String.raw`\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?|[A-Za-z]{3}[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{4})?|\d{1,2}[- ][A-Za-z]{3}[a-z]*(?:[- ,]+\d{2,4})?`;
   const LINE_RE = new RegExp('^(' + DATE_TOKEN + ')\\s+(.+)$');
   const SECOND_DATE_RE = /^(\d{4}[\/\-.]\d{1,2}[\/\-.]\d{1,2}|\d{1,2}[\/\-.]\d{1,2}(?:[\/\-.]\d{2,4})?)\s+(.*)$/;
-  // Commas optional, so both 3,200.00 and 3200.00 match. Cents stay required so
-  // years and account numbers on a statement line are less likely to match.
-  const AMT_SRC = String.raw`(?<![\w.])\(?[-+]?\$?\s?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})\)?(?:-|\s?(?:CR|DB|DR))?(?![\w])`;
+  // Commas optional, so both 3,200.00 and 3200.00 match. Indian grouping
+  // (1,23,456.00) is allowed too. Cents stay required so years and account
+  // numbers on a statement line are less likely to match. $ , ₹ , Rs, and INR
+  // are labels, not a conversion.
+  const AMT_SRC = String.raw`(?<![\w.])\(?[-+]?(?:(?:₹|\$)|(?:Rs\.?|INR)\s?)?\s?(?:\d{1,3}(?:,\d{2,3})+|\d+)(?:\.\d{2})\)?(?:-|\s?(?:CR|DB|DR))?(?:\s?(?:INR|Rs\.?))?(?![\w])`;
   const SUMMARY_LINE = /(beginning|ending|opening|closing|previous|new|available)\s+balance|credit limit|minimum payment|account summary/i;
   const SUMMARY_DESC = /^(total|subtotal|totals|total (purchases|debits|credits|withdrawals|deposits|fees|payments|amount|charges))$/i;
 
@@ -532,10 +536,24 @@
     return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
   }
 
-  function parseDate(s, fallbackYear) {
+  function dateOrderOf(options) {
+    if (options === 'dmy') return 'dmy';
+    if (options && typeof options === 'object' && options.dateOrder === 'dmy') return 'dmy';
+    return 'mdy';
+  }
+
+  function orderedDate(y, first, second, order) {
+    const dayFirst = order === 'dmy';
+    const preferred = dayFirst ? validDate(y, second, first) : validDate(y, first, second);
+    if (preferred) return preferred;
+    return dayFirst ? validDate(y, first, second) : validDate(y, second, first);
+  }
+
+  function parseDate(s, fallbackYear, order) {
     if (s == null) return null;
     s = String(s).trim();
     if (!s) return null;
+    const dateOrder = order === 'dmy' ? 'dmy' : 'mdy';
     let m;
     if ((m = s.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/))) {
       return validDate(+m[1], +m[2], +m[3]);
@@ -543,10 +561,10 @@
     if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) {
       let y = +m[3];
       if (y < 100) y += 2000;
-      return validDate(y, +m[1], +m[2]);
+      return orderedDate(y, +m[1], +m[2], dateOrder);
     }
     if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/))) {
-      return validDate(fallbackYear, +m[1], +m[2]);
+      return orderedDate(fallbackYear, +m[1], +m[2], dateOrder);
     }
     if ((m = s.match(/^([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?$/))) {
       const mo = MON[m[1].toLowerCase()];
@@ -585,6 +603,118 @@
       : { month: 'short' });
   }
 
+  function formatDisplayDate(iso, order) {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(iso || '');
+    if (order === 'dmy') return m[3] + '/' + m[2] + '/' + m[1];
+    return m[2] + '/' + m[3] + '/' + m[1];
+  }
+
+  function formatMoney(n, currency) {
+    const inr = currency === 'INR';
+    const value = Number(n);
+    return new Intl.NumberFormat(inr ? 'en-IN' : 'en-US', {
+      style: 'currency',
+      currency: inr ? 'INR' : 'USD'
+    }).format(Number.isFinite(value) ? value : 0);
+  }
+
+  function cycleStartDay(value) {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 28) return 1;
+    return n;
+  }
+
+  function shiftMonth(ym, delta) {
+    const parts = String(ym || '').split('-');
+    let y = +parts[0];
+    let m = +parts[1] + delta;
+    if (!y || !parts[1]) return '';
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    return y + '-' + String(m).padStart(2, '0');
+  }
+
+  function cycleOf(iso, startDay) {
+    const day0 = cycleStartDay(startDay);
+    const text = String(iso || '');
+    const month = text.slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) return '';
+    if (day0 === 1) return month;
+    const day = +text.slice(8, 10);
+    if (!day) return month;
+    return day >= day0 ? month : shiftMonth(month, -1);
+  }
+
+  function cycleBounds(ym, startDay) {
+    const day0 = cycleStartDay(startDay);
+    const key = String(ym || '');
+    if (!/^\d{4}-\d{2}$/.test(key)) return { from: '', to: '' };
+    if (day0 === 1) return { from: key + '-01', to: key + '-31' };
+    const next = shiftMonth(key, 1);
+    return {
+      from: key + '-' + String(day0).padStart(2, '0'),
+      to: next + '-' + String(day0 - 1).padStart(2, '0')
+    };
+  }
+
+  function daysInCycle(ym, startDay) {
+    const day0 = cycleStartDay(startDay);
+    if (day0 === 1) return daysInMonth(ym);
+    const bounds = cycleBounds(ym, day0);
+    if (!bounds.from) return 30;
+    const from = new Date(+bounds.from.slice(0, 4), +bounds.from.slice(5, 7) - 1, +bounds.from.slice(8, 10));
+    const to = new Date(+bounds.to.slice(0, 4), +bounds.to.slice(5, 7) - 1, +bounds.to.slice(8, 10));
+    return Math.round((to - from) / 86400000) + 1;
+  }
+
+  function isoFromDate(date) {
+    return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+  }
+
+  function elapsedInCycle(ym, startDay, today) {
+    const day0 = cycleStartDay(startDay);
+    const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
+    const todayIso = isoFromDate(now);
+    const todayCycle = cycleOf(todayIso, day0);
+    const dim = day0 === 1 ? daysInMonth(ym) : daysInCycle(ym, day0);
+    if (ym < todayCycle) return dim;
+    if (ym > todayCycle) return 0;
+    if (day0 === 1) return Math.min(now.getDate(), dim);
+    const bounds = cycleBounds(ym, day0);
+    const from = new Date(+bounds.from.slice(0, 4), +bounds.from.slice(5, 7) - 1, +bounds.from.slice(8, 10));
+    const cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.min(dim, Math.round((cur - from) / 86400000) + 1);
+  }
+
+  function periodLabel(ym, startDay, long) {
+    const day0 = cycleStartDay(startDay);
+    if (day0 === 1) {
+      if (long) return formatMonth(ym, true);
+      return formatMonth(ym, true).replace(/ \d{4}$/, '');
+    }
+    const bounds = cycleBounds(ym, day0);
+    if (!bounds.from) return formatMonth(ym, !!long);
+    const piece = iso => {
+      const d = new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+      const text = d.toLocaleString('en-US', { day: 'numeric', month: 'short' });
+      return long ? text + ' ' + iso.slice(0, 4) : text;
+    };
+    return piece(bounds.from) + '–' + piece(bounds.to);
+  }
+
+  function normalizePrefs(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const lands = ['spend', 'budgets', 'goals', 'projections', 'settings'];
+    return {
+      cur: src.cur === 'INR' ? 'INR' : 'USD',
+      df: src.df === 'dmy' ? 'dmy' : 'mdy',
+      cycle: cycleStartDay(src.cycle),
+      land: lands.includes(src.land) ? src.land : '',
+      den: src.den === 'compact' ? 'compact' : 'comfortable'
+    };
+  }
+
   function parseMoney(token) {
     if (token == null) return NaN;
     let s = String(token).trim();
@@ -602,8 +732,9 @@
       s = s.slice(0, suf.index).trim();
     }
     if (paren) s = s.replace(/^\(/, '').replace(/\)$/, '').trim();
+    s = s.replace(/[₹$]/g, '').replace(/^(?:rs\.?|inr)\s*/i, '').replace(/\s*(?:rs\.?|inr)$/i, '').trim();
     const leadingMinus = /^[-−]/.test(s);
-    s = s.replace(/^[-−+]/, '').replace(/\$/g, '').replace(/\s/g, '');
+    s = s.replace(/^[-−+]/, '').replace(/\s/g, '');
     let numStr;
     if (/^\d{1,3}(\.\d{3})+,\d{1,2}$/.test(s) || /^\d+,\d{1,2}$/.test(s)) {
       numStr = s.replace(/\./g, '').replace(',', '.');
@@ -730,6 +861,39 @@
     return y || new Date().getFullYear();
   }
 
+  // A CSV that does not quote ₹1,23,456.00 splits on the commas. Join the
+  // pieces back when the amount cell starts a currency figure.
+  function takeAmount(cols, idx) {
+    if (idx < 0) return '';
+    const cell = String(cols[idx] || '').trim();
+    if (!cell) return '';
+    const bare = cell.replace(/[₹$\s]/g, '').replace(/^(?:rs\.?|inr)/i, '').replace(/(?:rs\.?|inr)$/i, '');
+    const currency = /[₹$]|(?:^|\s)(?:rs\.?|inr)(?:\s|$)/i.test(cell);
+    if (!currency || /\.\d{2}$/.test(bare)) return cell;
+    const parts = [cell.replace(/,\s*$/, '')];
+    for (let i = idx + 1; i < cols.length; i++) {
+      const next = String(cols[i] || '').trim();
+      if (!/^\d{2,3}(?:\.\d{2})?$/.test(next)) break;
+      parts.push(next);
+      if (/\.\d{2}$/.test(next)) break;
+    }
+    return parts.join(',');
+  }
+
+  function reassembleRow(cols) {
+    const out = [];
+    for (let i = 0; i < cols.length; i++) {
+      const cell = String(cols[i] || '');
+      const taken = takeAmount(cols, i);
+      out.push(taken);
+      if (taken !== cell.trim() && taken.includes(',')) {
+        const extra = taken.split(',').length - 1;
+        i += extra;
+      }
+    }
+    return out;
+  }
+
   function combineDebitCredit(debitCell, creditCell) {
     const d = parseMoney(debitCell);
     const c = parseMoney(creditCell);
@@ -742,25 +906,25 @@
     return round2(raw);
   }
 
-  function rowFromMapping(cols, mapping, year) {
-    const date = parseDate(cols[mapping.dateIdx], year);
+  function rowFromMapping(cols, mapping, year, order) {
+    const date = parseDate(cols[mapping.dateIdx], year, order);
     if (!date) return null;
     let raw = NaN;
     if (mapping.amountIdx >= 0) {
-      const cell = cols[mapping.amountIdx] || '';
+      const cell = takeAmount(cols, mapping.amountIdx);
       if (String(cell).trim()) raw = parseMoney(cell);
     }
     if (!Number.isFinite(raw) && (mapping.debitIdx >= 0 || mapping.creditIdx >= 0)) {
       raw = combineDebitCredit(
-        mapping.debitIdx >= 0 ? cols[mapping.debitIdx] : '',
-        mapping.creditIdx >= 0 ? cols[mapping.creditIdx] : ''
+        mapping.debitIdx >= 0 ? takeAmount(cols, mapping.debitIdx) : '',
+        mapping.creditIdx >= 0 ? takeAmount(cols, mapping.creditIdx) : ''
       );
     }
     if (!Number.isFinite(raw)) return null;
     let desc = mapping.descIdx >= 0 ? (cols[mapping.descIdx] || '') : '';
     if (!String(desc).trim()) {
       const skip = new Set([mapping.dateIdx, mapping.amountIdx, mapping.debitIdx, mapping.creditIdx, mapping.catIdx, mapping.balanceIdx]);
-      desc = cols.filter((c, i) => !skip.has(i) && c && !looksLikeMoney(c) && !parseDate(c, year)).join(' ');
+      desc = cols.filter((c, i) => !skip.has(i) && c && !looksLikeMoney(c) && !parseDate(c, year, order)).join(' ');
     }
     desc = String(desc).replace(/\s+/g, ' ').trim() || 'Unknown';
     const txn = { date, desc, raw: round2(raw) };
@@ -771,11 +935,12 @@
     return txn;
   }
 
-  function headerlessTransactions(rows, year) {
+  function headerlessTransactions(rows, year, order) {
     const candidates = [];
-    rows.forEach(cols => {
-      if (!cols || !cols.length) return;
-      const date = parseDate(cols[0], year);
+    rows.forEach(src => {
+      if (!src || !src.length) return;
+      const cols = reassembleRow(src);
+      const date = parseDate(cols[0], year, order);
       if (!date) return;
       const moneyIdxs = [];
       cols.forEach((c, i) => { if (i > 0 && looksLikeMoney(c)) moneyIdxs.push(i); });
@@ -814,28 +979,30 @@
     }).filter(t => Number.isFinite(t.raw));
   }
 
-  function parseCsv(text) {
+  function parseCsv(text, options) {
+    const order = dateOrderOf(options);
     const rows = parseCsvTable(text);
     const hint = 'Expected a date and an amount (headers like Date, Description, Amount — or Debit and Credit). A headerless file should be date, description, amount.';
     if (!rows.length) return { txns: [], skipped: 0, hint };
     const year = inferYear(rows);
     const header = findHeader(rows);
     if (!header) {
-      const txns = headerlessTransactions(rows, year);
+      const txns = headerlessTransactions(rows, year, order);
       return { txns, skipped: 0, hint: txns.length ? '' : hint };
     }
     const txns = [];
     let skipped = 0;
     for (let i = header.index + 1; i < rows.length; i++) {
-      const txn = rowFromMapping(rows[i], header.mapping, year);
+      const txn = rowFromMapping(rows[i], header.mapping, year, order);
       if (txn) txns.push(txn);
       else if (rows[i].some(Boolean)) skipped++;
     }
     return { txns, skipped, hint: txns.length ? '' : hint };
   }
 
-  function parseStatementLines(lines, year) {
+  function parseStatementLines(lines, year, options) {
     const fallback = year || new Date().getFullYear();
+    const order = dateOrderOf(options);
     const out = [];
     for (const line of lines || []) {
       const ln = String(line || '').replace(/\s+/g, ' ').trim();
@@ -844,11 +1011,11 @@
       if (!m) continue;
       let rest = m[2];
       const second = rest.match(SECOND_DATE_RE);
-      if (second && parseDate(second[1], fallback)) rest = second[2];
+      if (second && parseDate(second[1], fallback, order)) rest = second[2];
       const amounts = rest.match(new RegExp(AMT_SRC, 'gi'));
       if (!amounts) continue;
       const pick = amounts.length <= 2 ? amounts[0] : amounts[amounts.length - 2];
-      const date = parseDate(m[1], fallback);
+      const date = parseDate(m[1], fallback, order);
       if (!date) continue;
       let desc = rest.replace(new RegExp(AMT_SRC, 'gi'), ' ').replace(/\s+/g, ' ').trim();
       if (desc.length < 2 || SUMMARY_DESC.test(desc)) continue;
@@ -939,10 +1106,11 @@
     return Object.entries(map).filter(([, value]) => value !== 0).sort((a, b) => b[1] - a[1]);
   }
 
-  function summarizeMonths(rows) {
+  function summarizeMonths(rows, startDay) {
+    const day0 = cycleStartDay(startDay);
     const map = new Map();
     for (const t of rows || []) {
-      const month = String(t.date || '').slice(0, 7);
+      const month = day0 === 1 ? String(t.date || '').slice(0, 7) : cycleOf(t.date, day0);
       if (!/^\d{4}-\d{2}$/.test(month)) continue;
       if (!map.has(month)) map.set(month, { month, income: 0, spend: 0, savings: 0, count: 0 });
       const item = map.get(month);
@@ -1003,7 +1171,7 @@
       .sort((a, b) => b.total - a.total);
   }
 
-  function summarize(rows) {
+  function summarize(rows, startDay) {
     const list = rows || [];
     const spendRows = list.filter(isSpend);
     const incomeRows = list.filter(isIncome);
@@ -1014,7 +1182,7 @@
     ), 0));
     const net = round2(totalIncome - totalSpend - totalSavings);
     const cats = categoryTotals(list);
-    const months = summarizeMonths(list);
+    const months = summarizeMonths(list, startDay);
     return {
       totalSpend,
       totalIncome,
@@ -1034,8 +1202,8 @@
     };
   }
 
-  function monthsByYear(rows) {
-    const months = summarizeMonths(rows);
+  function monthsByYear(rows, startDay) {
+    const months = summarizeMonths(rows, startDay);
     const map = new Map();
     months.forEach(item => {
       const year = item.month.slice(0, 4);
@@ -1061,22 +1229,28 @@
     return new Date(y, m, 0).getDate();
   }
 
-  function defaultPeriod(months, today) {
+  function defaultPeriod(months, today, startDay) {
     const list = [...new Set(months || [])].filter(month => /^\d{4}-\d{2}$/.test(month)).sort();
     if (!list.length) return '';
     const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
-    const current = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const iso = isoFromDate(now);
+    const current = cycleStartDay(startDay) === 1 ? iso.slice(0, 7) : cycleOf(iso, startDay);
     return list.includes(current) ? current : list[list.length - 1];
   }
 
-  function projections(rows, today, focusMonth) {
+  function projections(rows, today, focusMonth, startDay) {
     const now = today instanceof Date && !Number.isNaN(today.getTime()) ? today : new Date();
-    const calendarMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-    const months = summarizeMonths(rows);
+    const day0 = cycleStartDay(startDay);
+    const calendarMonth = day0 === 1
+      ? now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
+      : cycleOf(isoFromDate(now), day0);
+    const months = summarizeMonths(rows, day0);
     if (focusMonth && /^\d{4}-\d{2}$/.test(focusMonth)) {
       const focus = months.find(item => item.month === focusMonth) || null;
-      const dim = daysInMonth(focusMonth);
-      const elapsed = focusMonth === calendarMonth ? Math.min(now.getDate(), dim) : dim;
+      const dim = day0 === 1 ? daysInMonth(focusMonth) : daysInCycle(focusMonth, day0);
+      const elapsed = focusMonth === calendarMonth
+        ? (day0 === 1 ? Math.min(now.getDate(), dim) : elapsedInCycle(focusMonth, day0, now))
+        : dim;
       const extend = (amount) => {
         const value = amount || 0;
         if (!focus || focusMonth !== calendarMonth || elapsed < 1) return round2(value);
@@ -1090,7 +1264,7 @@
         scoped: true,
         finished: focusMonth < calendarMonth,
         currentMonth: focusMonth,
-        currentLabel: formatMonth(focusMonth, true),
+        currentLabel: periodLabel(focusMonth, day0, true),
         elapsed: focusMonth > calendarMonth ? 0 : elapsed,
         days: dim,
         spentSoFar: focus ? focus.spend : 0,
@@ -1206,20 +1380,26 @@
     };
   }
 
-  function budgetMonth(rows, range) {
-    const months = summarizeMonths(rows);
+  function budgetMonth(rows, range, startDay) {
+    const day0 = cycleStartDay(startDay);
+    const months = summarizeMonths(rows, day0);
     const from = range && range.dateFrom;
     const to = range && range.dateTo;
-    if (from && to && from.slice(0, 7) === to.slice(0, 7) && /^\d{4}-\d{2}/.test(from)) {
+    if (day0 === 1 && from && to && from.slice(0, 7) === to.slice(0, 7) && /^\d{4}-\d{2}/.test(from)) {
       return from.slice(0, 7);
     }
+    if (day0 !== 1 && from && /^\d{4}-\d{2}/.test(from)) return from.slice(0, 7);
     return months.length ? months[months.length - 1].month : '';
   }
 
-  function planReport(rows, budgets, goals, range) {
-    const month = budgetMonth(rows, range);
+  function planReport(rows, budgets, goals, range, startDay) {
+    const day0 = cycleStartDay(startDay);
+    const month = budgetMonth(rows, range, day0);
     const spent = {};
-    (rows || []).filter(t => month && String(t.date).startsWith(month) && isSpend(t)).forEach(t => {
+    (rows || []).filter(t => {
+      if (!month || !isSpend(t)) return false;
+      return day0 === 1 ? String(t.date).startsWith(month) : cycleOf(t.date, day0) === month;
+    }).forEach(t => {
       spent[t.c] = round2((spent[t.c] || 0) + magnitude(t));
     });
     const limits = normalizeBudgets(budgets);
@@ -1234,7 +1414,7 @@
     }).sort((a, b) => b.ratio - a.ratio);
     return {
       month,
-      monthLabel: month ? formatMonth(month, true) : '',
+      monthLabel: month ? periodLabel(month, day0, true) : '',
       statuses,
       alerts: statuses.filter(item => item.level !== 'ok'),
       goals: normalizeGoals(goals).map(goalProgress)
@@ -1276,6 +1456,7 @@
       th: data.th || data.theme || 'auto',
       sm: data.sm || '',
       v: data.v || 'tx',
+      pref: normalizePrefs(data.pref || data.preferences),
       cc,
       b: normalizeBudgets(data.b || data.budgets),
       g: normalizeGoals(data.g || data.goals),
@@ -1341,7 +1522,13 @@
     categoryOf,
     parseDate,
     formatMonth,
+    formatDisplayDate,
+    formatMoney,
     monthTick,
+    cycleOf,
+    cycleBounds,
+    periodLabel,
+    normalizePrefs,
     parseMoney,
     looksLikeMoney,
     parseCsv,

@@ -6,13 +6,14 @@
   <title>Spending Analyzer</title>
   <meta name="description" content="Private, in-browser spending analyzer for bank CSVs and statement PDFs.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233730a3'/%3E%3Cpath d='M8 22h16M8 16h10M8 10h6' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=22">
   <script>
     try {
       var saved = JSON.parse(localStorage.getItem('spend_v3') || 'null');
       var pref = saved && saved.th || 'auto';
       var dark = pref === 'dark' || (pref !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      if (saved && saved.pref && saved.pref.den === 'compact') document.documentElement.dataset.density = 'compact';
     } catch (e) {}
   </script>
 </head>
@@ -170,26 +171,79 @@
             <h1>Spending Analyzer</h1>
             <p class="sub">Import a bank CSV or statement PDF, see where the money went, and fix categories. Files are read in the browser and saved in local storage.</p>
           </div>
-          <div class="actions">
-            <select id="theme" aria-label="Theme">
-              <option value="auto">System theme</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-            <select id="mode" aria-label="How to read amounts">
-              <option value="auto">Auto-detect amounts</option>
-              <option value="bank">Bank: debits negative</option>
-              <option value="card">Card: charges positive</option>
-            </select>
-            <button type="button" class="primary" id="exp">Export CSV</button>
-            <button type="button" id="backup">Backup JSON</button>
-            <button type="button" id="restoreBtn">Restore JSON</button>
-            <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
-            <button type="button" class="danger quiet" id="clr">Clear data</button>
-          </div>
         </header>
+        <div class="pref-grid">
+          <section class="card pref-card">
+            <h3>Appearance</h3>
+            <label>Theme
+              <select id="theme" aria-label="Theme">
+                <option value="auto">System theme</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <label>Density
+              <select id="density" aria-label="Density">
+                <option value="comfortable">Comfortable</option>
+                <option value="compact">Compact</option>
+              </select>
+            </label>
+          </section>
+          <section class="card pref-card">
+            <h3>Money and dates</h3>
+            <label>Display currency
+              <select id="currency" aria-label="Display currency">
+                <option value="USD">US dollar ($)</option>
+                <option value="INR">Indian rupee (₹)</option>
+              </select>
+            </label>
+            <p class="detail">This changes the symbol and how digits are grouped. Amounts are not converted.</p>
+            <label>How to read amounts
+              <select id="mode" aria-label="How to read amounts">
+                <option value="auto">Auto-detect amounts</option>
+                <option value="bank">Bank: debits negative</option>
+                <option value="card">Card: charges positive</option>
+              </select>
+            </label>
+            <label>Date order
+              <select id="dateOrder" aria-label="Date order">
+                <option value="mdy">Month/day/year</option>
+                <option value="dmy">Day/month/year</option>
+              </select>
+            </label>
+            <p class="detail">Used on screen and when a statement date is numeric, such as 01/05/2026. A year-month-day date in a file stays unambiguous. If the chosen order is not a real date, the other order is used.</p>
+            <label>Salary cycle starts on day
+              <select id="cycleDay" aria-label="Salary cycle start day"></select>
+            </label>
+            <p class="detail">Day 1 is a calendar month. A later day groups spending from that day through the day before it next month, so a payday can start the month. February 29 is not used as a start day.</p>
+          </section>
+          <section class="card pref-card">
+            <h3>Start</h3>
+            <label>Open on
+              <select id="landing" aria-label="Tab to open">
+                <option value="">Last place you were</option>
+                <option value="spend">Spending</option>
+                <option value="budgets">Monthly budgets</option>
+                <option value="goals">Savings goals</option>
+                <option value="projections">Projections</option>
+                <option value="settings">Settings</option>
+              </select>
+            </label>
+          </section>
+          <section class="card pref-card">
+            <h3>Your data</h3>
+            <div class="actions pref-actions">
+              <button type="button" class="primary" id="exp">Export CSV</button>
+              <button type="button" id="backup">Backup JSON</button>
+              <button type="button" id="restoreBtn">Restore JSON</button>
+              <input id="restoreFile" class="file-input" type="file" accept="application/json,.json" tabindex="-1">
+              <button type="button" class="danger quiet" id="clr">Clear data</button>
+            </div>
+            <p class="detail">Export CSV keeps the columns Date, Description, Merchant, Category, and Amount. Amount stays a signed number so the file can be imported again. Clear data removes transactions, category choices, your categories, budgets, and goals. These display preferences stay on this device.</p>
+          </section>
+        </div>
         <footer class="footer">
-          Transactions, budgets, and goals stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON if you want a copy you can restore later.
+          Transactions, budgets, goals, and these preferences stay in this browser under the <code>spend_v3</code> local storage key. There is no account and no upload. Backup JSON includes the preferences if you want a copy you can restore later.
         </footer>
       </div>
     </section>
@@ -201,7 +255,7 @@
   </div>
 
   <noscript>This analyzer needs JavaScript. It still keeps your data on this device.</noscript>
-  <script src="logic.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="logic.js?v=22"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>
