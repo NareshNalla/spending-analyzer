@@ -449,6 +449,28 @@ tr:hover td { background: color-mix(in srgb, var(--ac-soft) 65%, transparent); }
 }
 .toast button { background: transparent; color: inherit; border-color: currentColor; min-height: 34px; }
 
+.pref-grid { display: grid; gap: 14px; margin-top: 14px; }
+.pref-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--mut);
+}
+.pref-card select { width: 100%; max-width: 28rem; }
+.pref-card .detail { margin-top: 8px; }
+.pref-actions { justify-content: flex-start; margin-top: 12px; }
+
+:root[data-density="compact"] body { font-size: 14px; }
+:root[data-density="compact"] .wrap { padding: 12px 0 28px; }
+:root[data-density="compact"] .card { padding: 8px 10px; }
+:root[data-density="compact"] .drop { padding: 12px 10px; }
+:root[data-density="compact"] th,
+:root[data-density="compact"] td { padding: 4px 6px; }
+:root[data-density="compact"] .v { font-size: 1.2rem; }
+
 .footer { color: var(--mut); font-size: 13px; margin-top: 18px; }
 
 :focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }

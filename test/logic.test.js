@@ -901,3 +901,94 @@ test('a typed year and an empty month stay available', () => {
     L.setCustomCategories([]);
   }
 });
+
+test('rupee amounts parse and Indian grouping is a display label', () => {
+  assert.equal(L.parseMoney('₹1,23,456.00'), 123456);
+  assert.equal(L.parseMoney('Rs. 1,500.00'), 1500);
+  assert.equal(L.parseMoney('Rs 1,500.00'), 1500);
+  assert.equal(L.parseMoney('INR 1500'), 1500);
+  assert.equal(L.parseMoney('INR1500.50'), 1500.5);
+  assert.equal(L.parseMoney('1500 INR'), 1500);
+  assert.equal(L.parseMoney('(₹1,234.56)'), -1234.56);
+  assert.equal(L.parseMoney('₹1,23,456'), 123456);
+  assert.equal(L.formatMoney(123456, 'INR'), '₹1,23,456.00');
+  assert.equal(L.formatMoney(1234.56, 'USD'), '$1,234.56');
+  const lines = L.parseStatementLines([
+    '05/01/2026 SWIGGY ₹1,23,456.00',
+    '06/01/2026 BIGBASKET Rs. 1,500.00',
+    '07/01/2026 FUEL INR 1500.00'
+  ], 2026);
+  assert.deepEqual(lines.map(t => [t.date, t.desc, t.raw]), [
+    ['2026-05-01', 'SWIGGY', 123456],
+    ['2026-06-01', 'BIGBASKET', 1500],
+    ['2026-07-01', 'FUEL', 1500]
+  ]);
+  const csv = L.parseCsv('Date,Description,Amount\n05/01/2026,SWIGGY,"₹1,23,456.00"\n06/01/2026,FUEL,INR 1500\n');
+  assert.equal(csv.txns[0].raw, 123456);
+  assert.equal(csv.txns[0].date, '2026-05-01');
+  assert.equal(csv.txns[1].raw, 1500);
+  const split = L.parseCsv('Date,Description,Amount\n05/01/2026,SWIGGY,₹1,23,456.00\n');
+  assert.equal(split.txns[0].raw, 123456);
+  assert.equal(split.txns[0].desc, 'SWIGGY');
+});
+
+test('day-first dates are opt-in and month-first stays the default', () => {
+  assert.equal(L.parseDate('01/05/2026', 2020, 'dmy'), '2026-05-01');
+  assert.equal(L.parseDate('01/05/2026', 2020, 'mdy'), '2026-01-05');
+  assert.equal(L.parseDate('15/01/2026', 2020, 'mdy'), '2026-01-15');
+  assert.equal(L.parseDate('2026-01-05', 2020, 'dmy'), '2026-01-05');
+  assert.equal(L.formatDisplayDate('2026-01-05', 'dmy'), '05/01/2026');
+  assert.equal(L.formatDisplayDate('2026-01-05', 'mdy'), '01/05/2026');
+  const parsed = L.parseCsv('05/01/2026,RENT PAYMENT,-1450.00\n', { dateOrder: 'dmy' });
+  assert.equal(parsed.txns[0].date, '2026-01-05');
+  const lines = L.parseStatementLines(['05/01/2026 RENT PAYMENT 1,450.00'], 2026, { dateOrder: 'dmy' });
+  assert.equal(lines[0].date, '2026-01-05');
+  assert.equal(lines[0].raw, 1450);
+});
+
+test('salary cycle day 1 matches calendar months and a later day shifts the window', () => {
+  assert.equal(L.cycleOf('2026-09-24', 1), '2026-09');
+  assert.deepEqual(L.cycleBounds('2026-09', 1), { from: '2026-09-01', to: '2026-09-31' });
+  assert.equal(L.cycleOf('2026-09-24', 25), '2026-08');
+  assert.equal(L.cycleOf('2026-09-25', 25), '2026-09');
+  assert.equal(L.cycleOf('2026-01-10', 25), '2025-12');
+  assert.deepEqual(L.cycleBounds('2026-09', 25), { from: '2026-09-25', to: '2026-10-24' });
+  assert.deepEqual(L.cycleBounds('2026-08', 25), { from: '2026-08-25', to: '2026-09-24' });
+  assert.equal(L.periodLabel('2026-09', 1, true), L.formatMonth('2026-09', true));
+  const rows = [
+    { date: '2026-08-25', desc: 'RENT A', raw: -10 },
+    { date: '2026-09-24', desc: 'RENT B', raw: -5 },
+    { date: '2026-09-25', desc: 'RENT C', raw: -7 }
+  ];
+  const decorated = L.decorate(rows, 'bank', { Rent: 'Rent' });
+  const calendar = L.summarizeMonths(decorated.rows, 1);
+  assert.deepEqual(calendar.map(item => item.month), ['2026-08', '2026-09']);
+  const cycled = L.summarizeMonths(decorated.rows, 25);
+  assert.deepEqual(cycled.map(item => [item.month, item.spend]), [
+    ['2026-08', 15],
+    ['2026-09', 7]
+  ]);
+  assert.equal(L.defaultPeriod(['2026-08', '2026-09'], new Date(2026, 8, 10), 25), '2026-08');
+  assert.equal(L.defaultPeriod(['2026-08', '2026-09'], new Date(2026, 8, 10), 1), '2026-09');
+});
+
+test('preferences default for older backups and round-trip when set', () => {
+  assert.deepEqual(L.normalizePrefs(null), {
+    cur: 'USD', df: 'mdy', cycle: 1, land: '', den: 'comfortable'
+  });
+  assert.deepEqual(L.normalizePrefs({ cur: 'EUR', df: 'dmy', cycle: 31, land: 'nope', den: 'compact' }), {
+    cur: 'USD', df: 'dmy', cycle: 1, land: '', den: 'compact'
+  });
+  const chosen = L.normalizePrefs({ cur: 'INR', cycle: 25, land: 'budgets' });
+  assert.equal(chosen.cur, 'INR');
+  assert.equal(chosen.cycle, 25);
+  assert.equal(chosen.land, 'budgets');
+  const bare = L.parseBackup(JSON.stringify({ t: [{ date: '2026-01-05', desc: 'KROGER', raw: -10 }] }));
+  assert.deepEqual(bare.pref, { cur: 'USD', df: 'mdy', cycle: 1, land: '', den: 'comfortable' });
+  const backup = L.buildBackup({
+    t: [{ date: '2026-01-05', desc: 'KROGER', raw: -10 }],
+    pref: { cur: 'INR', df: 'dmy', cycle: 25, land: 'goals', den: 'compact' }
+  });
+  const restored = L.parseBackup(JSON.stringify(backup));
+  assert.deepEqual(restored.pref, { cur: 'INR', df: 'dmy', cycle: 25, land: 'goals', den: 'compact' });
+});
